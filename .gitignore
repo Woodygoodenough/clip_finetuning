@@ -4,3 +4,4 @@ full_*/
 generated_*/
 *_cache/
 retrieve_*/
+.DS_Store
