@@ -111,6 +111,7 @@ class OpenClipManagment:
             return results
 
 
+# %%
 # small demo
 if __name__ == "__main__":
     ds = Records.from_json("clip_dataset_valid.json")
@@ -122,3 +123,10 @@ if __name__ == "__main__":
         plt.imshow(image)
         plt.title(f"Similarity: {similarity:.2f}")
         plt.show()
+
+
+# %%
+ds = Records.from_json("clip_dataset_valid.json")
+len(ds)
+
+# %%
