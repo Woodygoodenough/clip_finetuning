@@ -26,26 +26,22 @@ class Records:
     records: List[Record]
 
     @classmethod
-    def from_dataframe(cls, dataframe: pd.DataFrame) -> Records:
-        return cls(records=[Record.from_series(series) for _, series in dataframe.iterrows()])
+    def from_json(cls, path: str) -> Records:
+        return cls(records=[Record.from_series(series) for _, series in pd.read_json(path).iterrows()])
 
     def __len__(self):
         return len(self.records)
     
-    def __getitem__(self, index: int) -> Record:
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return Records(records=self.records[index])
         return self.records[index]
 
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame([record.__dict__ for record in self.records])
 
-
-class Dataset:
-    def __init__(self, records: Records):
-        self.records = records
-
-    @classmethod
-    def from_csv(cls, path: str) -> Dataset:
-        return cls(Records.from_csv(path))
+    def get_image_paths(self) -> List[Union[str, Path]]:
+        return [record.image_path for record in self.records]
 
     
 
@@ -87,13 +83,20 @@ class OpenClipManagment():
             similarity = (text_tensor @ image_tensor.T).item()
             return similarity
     
-    def text_image_retrieval(self, query: str, image_paths: List[Union[str, Path]], top_k: int = 5):
+    def text_image_retrieval(self, query: str, dataset: Records, top_k: int = 5):
         """Retrieve top-k most similar images for a text query"""
         with torch.no_grad():
             text_tensor = self.normalize_tensor(self.encode_text([query]))
-            image_tensors = self.normalize_tensor(self.encode_image(image_paths))
+            image_tensors = self.normalize_tensor(self.encode_image(dataset.get_image_paths()))
             similarities = (text_tensor @ image_tensors.T).squeeze(0)
             top_indices = similarities.argsort(descending=True)[:top_k]
-            results = [(image_paths[i], similarities[i].item()) for i in top_indices]
+            results = [(dataset[i].image_path, similarities[i].item()) for i in top_indices]
             return results
     
+
+# small demo
+if __name__ == "__main__":
+    ds = Records.from_json("clip_dataset_valid.json")
+    oc = OpenClipManagment()
+    results = oc.text_image_retrieval("black pants", ds[:50])
+    print(results)
