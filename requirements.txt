@@ -1,0 +1,7 @@
+torch>=2.0.0
+open-clip-torch>=2.20.0
+webdataset>=1.0.0
+pillow>=9.0.0
+pandas>=1.5.0
+matplotlib>=3.5.0
+

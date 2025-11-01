@@ -10,7 +10,12 @@ from tqdm import tqdm
 
 def create_clip_dataset(split="valid", output_file=None):
     """Create a CLIP-ready dataset mapping."""
-    
+    print("CLIP Dataset Preparation")
+    print("=" * 30)
+
+    print(f"Creating {split} dataset...")
+    print(f"=" * 30)
+
     # Paths
     meta_dir = Path(f"full_{split}_info_PAI")
     img_dir = Path(f"extracted_{split}_images")
@@ -62,37 +67,7 @@ def create_clip_dataset(split="valid", output_file=None):
     
     print(f"\nDataset created: {output_file}")
     print(f"Total image-caption pairs: {len(image_caption_pairs)}")
-    
-    # Show statistics
-    categories = [item['category'] for item in image_caption_pairs]
-    from collections import Counter
-    category_counts = Counter(categories)
-    
-    print(f"\nCategory distribution:")
-    for cat, count in category_counts.most_common(10):
-        print(f"  {cat}: {count}")
-    
-    # Show sample pairs
-    print(f"\nSample pairs:")
-    for i, item in enumerate(image_caption_pairs[:3]):
-        print(f"{i+1}. {item['image_name']} -> {item['caption'][:80]}...")
-    
-    return image_caption_pairs
-
-def main():
-    print("CLIP Dataset Preparation")
-    print("=" * 30)
-    
-    # Create validation set (smaller, for testing)
-    print("Creating validation dataset...")
-    valid_data = create_clip_dataset("valid")
-    
-    # Optionally create training set (larger)
-    print(f"\n{'='*30}")
-    response = input("Create training dataset? (y/n): ").lower().strip()
-    if response == 'y':
-        print("Creating training dataset...")
-        train_data = create_clip_dataset("train")
 
 if __name__ == "__main__":
-    main()
+    # create_clip_dataset("valid", "clip_dataset_valid.json")
+    create_clip_dataset("train", "clip_dataset_train.json")
