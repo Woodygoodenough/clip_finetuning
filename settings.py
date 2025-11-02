@@ -25,6 +25,10 @@ NUM_WORKERS = 2
 ## hyperparameters, training
 LEARNING_RATE = 1e-5
 
+## checkpoint directory
+CHECKPOINT_DIR = "drive/MyDrive/6740 Group Project/checkpoints"
+
+
 ## dataset
 TRAIN_DATASET_PATTERN = "drive/MyDrive/6740 Group Project/clip_dataset_train.{000000..000260}.tar"
 VALID_DATASET_PATTERN = "drive/MyDrive/6740 Group Project/clip_dataset_valid.{000000..000032}.tar"

@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Checkpoint settings
-CHECKPOINT_DIR = "./checkpoints"
 CHECKPOINT_INTERVAL = 100  # Save checkpoint every N steps
 SAVE_BEST_CHECKPOINT = True  # Save checkpoint with best (lowest) loss
 
@@ -165,7 +164,7 @@ def load_webdataset(dataset_pattern: str, batch_size: int = settings.BATCH_SIZE,
 
 if __name__ == '__main__':
     # Create checkpoint directory
-    checkpoint_path = Path(CHECKPOINT_DIR)
+    checkpoint_path = Path(settings.CHECKPOINT_DIR)
     checkpoint_path.mkdir(parents=True, exist_ok=True)
     logger.info(f"Checkpoint directory: {checkpoint_path.absolute()}")
     
