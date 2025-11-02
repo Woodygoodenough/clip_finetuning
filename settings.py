@@ -26,5 +26,5 @@ NUM_WORKERS = 2
 LEARNING_RATE = 1e-5
 
 ## dataset
-TRAIN_DATASET_PATTERN = "webdataset_shards/clip_dataset_train.{000000..000000}.tar"
-VALID_DATASET_PATTERN = "webdataset_shards/clip_dataset_valid.{000000..000000}.tar"
+TRAIN_DATASET_PATTERN = "drive/MyDrive/6740 Group Project/clip_dataset_train.{000000..000260}.tar"
+VALID_DATASET_PATTERN = "drive/MyDrive/6740 Group Project/clip_dataset_valid.{000000..000032}.tar"
