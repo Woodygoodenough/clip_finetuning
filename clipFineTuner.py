@@ -2,6 +2,7 @@
 from openClipManagement import OpenClipManagment
 import torch
 import torch.nn as nn
+from torch.cuda.amp import autocast, GradScaler  # Mixed precision for T4 GPU
 from typing import List, Tuple, Optional
 import settings
 import webdataset as wds
@@ -32,6 +33,9 @@ class CLIPFineTuner:
         )
         self.loss_fn = nn.CrossEntropyLoss()
         self.device = self.clip.device
+        # Mixed precision scaler for T4 GPU optimization
+        # Enables ~2x faster training with ~50% less memory usage
+        self.scaler = GradScaler()
 
     def contrastive_loss(self, image_embeds: torch.Tensor, text_embeds: torch.Tensor) -> torch.Tensor:
         """Compute CLIP contrastive loss"""
@@ -46,7 +50,7 @@ class CLIPFineTuner:
         return (loss_i + loss_t) / 2
 
     def train_step(self, image_tensors: torch.Tensor, captions: List[str]) -> float:
-        """Single training step
+        """Single training step with mixed precision for T4 GPU optimization
         Args:
             image_tensors: Preprocessed image tensor batch [batch_size, channels, height, width]
             captions: List of text captions
@@ -59,13 +63,17 @@ class CLIPFineTuner:
         # Ensure tensors are on correct device
         image_tensors = image_tensors.to(self.device)
         
-        # Encode images and text
-        image_embeds = self.clip.model.encode_image(image_tensors)
-        text_embeds = self.clip.encode_text(captions)
-
-        loss = self.contrastive_loss(image_embeds, text_embeds)
-        loss.backward()
-        self.optimizer.step()
+        # Use mixed precision for faster training and less memory usage
+        # This enables automatic mixed precision (FP16) which is ~2x faster on T4
+        with autocast():
+            image_embeds = self.clip.model.encode_image(image_tensors)
+            text_embeds = self.clip.encode_text(captions)
+            loss = self.contrastive_loss(image_embeds, text_embeds)
+        
+        # Scale loss and backward pass for mixed precision
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
 
         return loss.item()
 
@@ -78,6 +86,7 @@ class CLIPFineTuner:
         checkpoint = {
             'model_state_dict': self.clip.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'scaler_state_dict': self.scaler.state_dict(),  # Save scaler state for mixed precision
         }
         if additional_info:
             checkpoint.update(additional_info)
@@ -93,6 +102,8 @@ class CLIPFineTuner:
         self.clip.model.load_state_dict(checkpoint['model_state_dict'])
         if 'optimizer_state_dict' in checkpoint:
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        if 'scaler_state_dict' in checkpoint:
+            self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
         logger.info(f"Checkpoint loaded from {path}")
 
 
@@ -163,6 +174,14 @@ if __name__ == '__main__':
         logger.info("Initializing CLIP manager and fine-tuner...")
         clip_manager = OpenClipManagment()
         finetuner = CLIPFineTuner(clip_manager)
+        
+        # Log GPU optimizations
+        device_info = f"Device: {finetuner.device}"
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+            device_info += f" | GPU: {gpu_name} ({gpu_memory:.1f} GB)"
+        logger.info(f"Training configuration: {device_info} | Batch Size: {settings.BATCH_SIZE} | Workers: {settings.NUM_WORKERS} | Mixed Precision: Enabled")
         
         # Load dataset
         logger.info(f"Loading dataset from {settings.TRAIN_DATASET_PATTERN}")

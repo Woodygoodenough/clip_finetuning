@@ -1,5 +1,9 @@
 import torch
-BATCH_SIZE = 32
+
+# GPU-optimized batch size for T4 (16GB)
+# ViT-B-32: ~3-4GB per batch of 64
+# Start with 64, can increase to 96-128 if memory allows
+BATCH_SIZE = 64
 
 ## dataset sanity check
 TOTAL_TRAIN = 260490
@@ -14,7 +18,9 @@ MODEL_CACHE_DIR = "./openclip_cache"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 ## computational resources
-NUM_WORKERS = 4
+# Reduced for Colab T4 to avoid memory issues
+# 2 workers is optimal for T4 GPU
+NUM_WORKERS = 2
 
 ## hyperparameters, training
 LEARNING_RATE = 1e-5
