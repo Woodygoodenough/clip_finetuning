@@ -17,11 +17,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Checkpoint settings
-CHECKPOINT_INTERVAL = 100  # Save checkpoint every N steps
-SAVE_BEST_CHECKPOINT = True  # Save checkpoint with best (lowest) loss
-
-# Training settings
-MAX_STEPS = None  # Set to None for full training, or a number to limit steps (e.g., 50 for testing)
 
 # %%
 class CLIPFineTuner:
@@ -187,15 +182,14 @@ if __name__ == '__main__':
         loader = load_webdataset(settings.TRAIN_DATASET_PATTERN)
         
         # Training loop
-        max_steps_msg = f" (limited to {MAX_STEPS} steps)" if MAX_STEPS else ""
+        max_steps_msg = f" (limited to {settings.MAX_STEPS} steps)" if settings.MAX_STEPS else ""
         logger.info(f"Starting training{max_steps_msg}...")
         step = 0
-        best_loss = float('inf')
         
         for batch in loader:
             # Check if we've reached the step limit
-            if MAX_STEPS is not None and step >= MAX_STEPS:
-                logger.info(f"Reached maximum step limit ({MAX_STEPS}). Stopping training.")
+            if settings.MAX_STEPS is not None and step >= settings.MAX_STEPS:
+                logger.info(f"Reached maximum step limit ({settings.MAX_STEPS}). Stopping training.")
                 break
             
             images, captions = batch[0], batch[1]
@@ -214,7 +208,7 @@ if __name__ == '__main__':
                 print(f"Step {step}, Loss: {loss:.4f}")
             
             # Save periodic checkpoint
-            if step % CHECKPOINT_INTERVAL == 0:
+            if step % settings.CHECKPOINT_INTERVAL == 0:
                 checkpoint_file = checkpoint_path / f"checkpoint_step_{step}.pt"
                 finetuner.save_checkpoint(
                     str(checkpoint_file),
@@ -222,15 +216,6 @@ if __name__ == '__main__':
                 )
                 logger.info(f"Periodic checkpoint saved at step {step}")
             
-            # Save best checkpoint
-            if SAVE_BEST_CHECKPOINT and loss < best_loss:
-                best_loss = loss
-                best_checkpoint_file = checkpoint_path / "best_checkpoint.pt"
-                finetuner.save_checkpoint(
-                    str(best_checkpoint_file),
-                    additional_info={'step': step, 'loss': loss, 'best': True}
-                )
-                logger.info(f"Best checkpoint saved at step {step} with loss {loss:.4f}")
         
         # Save final checkpoint
         final_checkpoint_file = checkpoint_path / "final_checkpoint.pt"

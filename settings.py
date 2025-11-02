@@ -27,7 +27,8 @@ LEARNING_RATE = 1e-5
 
 ## checkpoint directory
 CHECKPOINT_DIR = "drive/MyDrive/6740 Group Project/checkpoints"
-
+CHECKPOINT_INTERVAL = 1000
+MAX_STEPS = None
 
 ## dataset
 TRAIN_DATASET_PATTERN = "drive/MyDrive/6740 Group Project/clip_dataset_train.{000000..000260}.tar"
