@@ -1,11 +1,11 @@
 {
   "num_samples": 5000,
   "recall@5": {
-    "text_to_image": 0.456,
-    "image_to_text": 0.4534
+    "text_to_image": 0.4492,
+    "image_to_text": 0.4694
   },
   "recall@10": {
-    "text_to_image": 0.5624,
-    "image_to_text": 0.5684
+    "text_to_image": 0.5634,
+    "image_to_text": 0.5786
   }
 }

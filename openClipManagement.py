@@ -64,6 +64,14 @@ class OpenClipManagment:
         self.tokenizer = open_clip.get_tokenizer(settings.MODEL_NAME)
         self.device = torch.device(settings.DEVICE)
         self.model = self.model.to(self.device)
+    
+    @classmethod
+    def from_checkpoint(cls, checkpoint_path: str):
+        """Load model from checkpoint"""
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device(settings.DEVICE))
+        model = cls()
+        model.model.load_state_dict(checkpoint['model_state_dict'])
+        return model
 
     def view_params(self):
         total_params = sum(p.numel() for p in self.model.parameters())
@@ -101,6 +109,7 @@ class OpenClipManagment:
         with torch.no_grad():
             text_tensor = self.normalize_tensor(self.encode_text([text]))
             image_tensor = self.normalize_tensor(self.encode_image([image_path]))
+            # .item() raises if not a scalar
             similarity = (text_tensor @ image_tensor.T).item()
             return similarity
 

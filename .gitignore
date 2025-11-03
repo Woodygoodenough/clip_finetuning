@@ -8,3 +8,5 @@ retrieve_*/
 webdataset_shards/
 __pycache__/
 checkpoints/
+evaluation_results.json
+evaluation_results_checkpoint.json
