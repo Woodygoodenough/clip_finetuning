@@ -1,171 +1,166 @@
-# Fashion Dataset for CLIP Fine-tuning
+# CLIP Fine-tuning on Fashion Dataset
 
-This repository contains a fashion image-caption dataset derived from the Fashion-Gen dataset, prepared for fine-tuning CLIP (Contrastive Language-Image Pre-training) models.
+This repository contains a full pipeline to fine‑tune and evaluate OpenCLIP models on a Fashion‑Gen–derived image–caption dataset using WebDataset shards.
 
-## Dataset Overview
+## Current Status
 
-- **Total Images**: ~293,018
-- **Training Images**: ~260,490 (88.9%)
-- **Validation Images**: ~32,528 (11.1%)
-- **Domain**: Fashion & Apparel
-- **Format**: Image-caption pairs with product metadata
+- Primary dataset format is WebDataset shards (`*.tar`) accessed via glob patterns in `settings.py`.
+- Shard creation tool (`create_webdataset.py`) is production‑ready; use it to build shards from JSONs.
+- JSON mappings (`clip_dataset_train.json`, `clip_dataset_valid.json`) are included as sources for shard creation.
+- Training (`clipFineTuner.py`) uses an efficient WebDataset pipeline with mixed precision.
+- Evaluation (`evaluate_clip.py`) computes Recall@5 and Recall@10 for both text‑to‑image and image‑to‑text.
+- Configuration is centralized in `settings.py` (defaults are set for Google Colab; set `ON_COLAB=False` for local use).
 
-## Dataset Structure
+## Repository Overview
 
-### Image Directories
+- `clip_prep.py`: Build JSON mappings from raw Fashion‑Gen metadata/images.
+- `create_webdataset.py`: Convert JSON to WebDataset tar shards.
+- `dBManagement.py`: Thin wrapper around WebDataset with optimal loaders for CLIP.
+- `openClipManagement.py`: Model creation, preprocessing, tokenization, and helpers.
+- `clipFineTuner.py`: Training loop, checkpoints, mixed precision (AMP).
+- `evaluate_clip.py`: Validation metrics (Recall@k) using the same loader pipeline.
+- `settings.py`: All configuration (model, batch size, paths, shard patterns, checkpoints).
 
-#### `extracted_train_images/`
-Contains all training images in PNG format.
+## Environment Setup
 
-- **Content**: Product images from the training split
-- **File Format**: PNG images
-- **Naming Convention**: `{product_id}_{image_index}.png`
-- **Count**: ~260,490 images
-- **Usage**: Used for model training during fine-tuning
-
-#### `extracted_valid_images/`
-Contains all validation images in PNG format.
-
-- **Content**: Product images from the validation split
-- **File Format**: PNG images
-- **Naming Convention**: `{product_id}_{image_index}.png`
-- **Count**: ~32,528 images
-- **Usage**: Used for model evaluation and validation during fine-tuning
-
-### Metadata Directories
-
-#### `full_train_info_PAI/`
-Contains metadata files for training images stored as pickle files.
-
-- **Content**: Python pickle files (`.pkl`) containing product metadata
-- **Structure**: Each pickle file contains a dictionary with:
-  - `img_name`: Image filename
-  - `captions`: Product description/caption text
-  - `super_cls_name`: Product category (e.g., "SWEATERS", "TOPS", "JEANS")
-  - `product_id`: Unique product identifier
-- **Usage**: Source metadata for creating training dataset mappings
-
-#### `full_valid_info_PAI/`
-Contains metadata files for validation images stored as pickle files.
-
-- **Content**: Python pickle files (`.pkl`) containing product metadata
-- **Structure**: Same as `full_train_info_PAI/`, but for validation split
-- **Usage**: Source metadata for creating validation dataset mappings
-
-### Processed Dataset Files
-
-#### `clip_dataset_valid.json`
-Pre-processed JSON file containing validation image-caption pairs ready for CLIP fine-tuning.
-
-- **Format**: JSON array of objects
-- **Structure**: Each entry contains:
-  ```json
-  {
-    "image_path": "extracted_valid_images/{product_id}_{image_index}.png",
-    "image_name": "{product_id}_{image_index}.png",
-    "caption": "Detailed product description...",
-    "category": "CATEGORY_NAME",
-    "product_id": "product_id"
-  }
-  ```
-- **Count**: 32,528 entries
-- **Usage**: Direct input for CLIP fine-tuning scripts
-
-#### `clip_dataset_train.json` (if generated)
-Pre-processed JSON file containing training image-caption pairs.
-
-- **Format**: Same structure as `clip_dataset_valid.json`
-- **Count**: Expected ~260,490 entries (when generated)
-- **Usage**: Direct input for CLIP fine-tuning scripts
-
-## Data Fields
-
-Each dataset entry contains the following fields:
-
-- **`image_path`**: Relative path to the image file
-- **`image_name`**: Filename of the image
-- **`caption`**: Detailed product description including:
-  - Material (e.g., cotton, denim, leather)
-  - Style features (e.g., sleeve length, collar type)
-  - Color information
-  - Design details (e.g., graphics, patterns, hardware)
-  - Fit and sizing information
-- **`category`**: Product category (e.g., "SWEATERS", "TOPS", "JEANS", "JACKETS & COATS", "SANDALS")
-- **`product_id`**: Unique identifier for the product
-
-## Dataset Preparation
-
-The dataset can be prepared using `clip_prep.py`, which:
-1. Reads metadata from pickle files in `full_{split}_info_PAI/` directories
-2. Matches metadata with images in `extracted_{split}_images/` directories
-3. Creates JSON mapping files (`clip_dataset_{split}.json`) ready for CLIP fine-tuning
-
-## Usage
-
-This dataset is designed for:
-- Fine-tuning CLIP models for fashion domain
-- Text-to-image retrieval tasks
-- Image-to-text retrieval tasks
-- Fashion product search and recommendation systems
-
-## WebDataset Conversion
-
-For efficient training with OpenCLIP, the dataset can be converted to WebDataset format (tar shards).
-
-### Converting JSON to WebDataset Shards
-
-Use `create_webdataset.py` to convert JSON files to tar shards:
+Option A — pip (recommended):
 
 ```bash
-# Convert validation set
-python create_webdataset.py \
-    --json clip_dataset_valid.json \
-    --output-dir webdataset_shards \
-    --shard-size 1000
-
-# Convert training set (if available)
-python create_webdataset.py \
-    --json clip_dataset_train.json \
-    --output-dir webdataset_shards \
-    --shard-size 1000
+python -m venv .venv
+. .venv/Scripts/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-**Parameters:**
-- `--json`: Path to JSON file with image-caption pairs
-- `--output-dir`: Output directory for tar shards (default: `webdataset_shards`)
-- `--shard-size`: Number of samples per shard (default: 1000)
-- `--max-shards`: Limit number of shards for testing (optional)
-- `--image-key`: JSON key for image path (default: `image_path`)
-- `--caption-key`: JSON key for caption text (default: `caption`)
+Option B — conda:
 
-**Output Format:**
-- Shards: `{dataset_name}.{000000..NNNNNN}.tar`
-- Each shard contains pairs of: `{index:09d}.jpg` and `{index:09d}.txt`
-- Images are converted to JPEG format (95% quality) for efficiency
-
-### Using WebDataset Shards
-
-```python
-import webdataset as wds
-
-# Create dataset from shards
-dataset = (
-    wds.WebDataset("webdataset_shards/clip_dataset_train.{000000..000260}.tar")
-    .decode("pil")
-    .to_tuple("jpg", "txt")
-    .map_tuple(lambda img: img, lambda txt: txt.decode('utf-8'))
-)
-
-# Create dataloader
-loader = wds.WebLoader(dataset, batch_size=32, num_workers=4)
+```bash
+conda env create -f environment.yml
+conda activate clip-finetuning
 ```
 
-See `example_webdataset_usage.py` for a complete example.
+Notes:
+- Install a CUDA‑enabled PyTorch build if you have a GPU.
+- On Windows, prefer smaller `NUM_WORKERS` (see `settings.py`).
 
-## Notes
+## Data Preparation
 
-- Images are stored as PNG files in the original directories
-- Metadata is stored in pickle format and needs to be processed before use
-- The validation split has been processed into JSON format
-- Training split JSON can be generated using `clip_prep.py` if needed
-- WebDataset shards are recommended for large-scale training as they provide faster I/O and better shuffling
+Primary dataset representation is WebDataset shards (`*.tar`). Create shards from the included JSONs, or regenerate JSONs from raw Fashion‑Gen assets if needed.
+
+### 1) Create WebDataset shards (primary)
+
+```bash
+# Validation shards
+python create_webdataset.py \
+  --json clip_dataset_valid.json \
+  --output-dir webdataset_shards \
+  --shard-size 1000
+
+# Training shards
+python create_webdataset.py \
+  --json clip_dataset_train.json \
+  --output-dir webdataset_shards \
+  --shard-size 1000
+```
+
+The script prints how many shards were created and the canonical pattern, e.g.:
+```
+Shard pattern: clip_dataset_valid.{000000..000006}.tar
+```
+Use this pattern in `settings.py` or pass it via CLI (see below).
+
+### 2) (Optional) Regenerate JSON mappings from raw assets
+
+If you have the original Fashion‑Gen assets, you can recreate the JSON mapping files used to build shards.
+
+`clip_prep.py` expects directories like `full_{split}_info_PAI/` (pickles) and `extracted_{split}_images/` (PNGs).
+
+```bash
+# Example invocation (see __main__ in clip_prep.py)
+python clip_prep.py  # default in __main__ creates train JSON; edit as needed
+
+# Or inside the script:
+# create_clip_dataset("valid", "clip_dataset_valid.json")
+# create_clip_dataset("train", "clip_dataset_train.json")
+```
+
+Each JSON entry includes:
+- `image_path`: path to image
+- `image_name`: file name
+- `caption`: product description
+- `category`: coarse category
+- `product_id`: unique id
+
+## Configuration
+
+All knobs live in `settings.py`:
+- `ON_COLAB`: set to `False` for local paths; `True` uses Google Drive paths.
+- `BATCH_SIZE`, `NUM_WORKERS`: tune for your GPU/CPU (T4 defaults provided).
+- `MODEL_NAME`, `MODEL_PRETRAINED`, `MODEL_CACHE_DIR`: OpenCLIP model/version and cache.
+- `CHECKPOINT_DIR`, `EVAL_CHECKPOINT`, `CHECKPOINT_INTERVAL`.
+- `MAX_STEPS`: limit training steps when experimenting locally.
+- `TRAIN_DATASET_PATTERN`, `VALID_DATASET_PATTERN`, `TEST_DATASET_PATTERN`: shard patterns like `webdataset_shards/clip_dataset_valid.{000000..000006}.tar`.
+
+Tip: After shard creation, update the `{000000..NNNNNN}` ranges to match your printed counts.
+
+## Training
+
+Make sure `settings.py` points to your training shards and checkpoint directory. Then:
+
+```bash
+python clipFineTuner.py
+```
+
+Behavior:
+- Uses mixed precision (AMP) for speed/memory savings.
+- Loads shards via an efficient WebDataset loader with batched tokenization.
+- Logs progress every 10 steps; saves periodic checkpoints every `CHECKPOINT_INTERVAL`.
+- Saves `final_checkpoint.pt` on completion in `CHECKPOINT_DIR`.
+
+Common adjustments:
+- Reduce `BATCH_SIZE` if you see CUDA OOM.
+- Set `MAX_STEPS` (e.g., 500–2000) for quick iterations.
+
+## Evaluation
+
+Evaluate either the base pretrained model or a fine‑tuned checkpoint on validation shards.
+
+Base model (no checkpoint):
+```bash
+python evaluate_clip.py
+```
+
+Fine‑tuned checkpoint (uses `settings.EVAL_CHECKPOINT`):
+```bash
+python evaluate_clip.py --use-checkpoint
+```
+
+Override dataset pattern explicitly:
+```bash
+python evaluate_clip.py \
+  --dataset-path "webdataset_shards/clip_dataset_valid.{000000..000006}.tar"
+```
+
+Outputs:
+- Pretty‑printed metrics in console.
+- JSON written to `evaluation_results.json` (or `evaluation_results_checkpoint.json` when `--use-checkpoint`).
+
+Metrics reported:
+- Recall@5 and Recall@10 for text→image and image→text retrieval.
+
+## Troubleshooting
+
+- Paths on Colab vs. local: set `ON_COLAB` correctly and ensure shard paths exist.
+- Many samples skipped during shard creation: check that `image_path` in JSON points to real files.
+- Windows workers: try `NUM_WORKERS = 0–2` if you encounter DataLoader issues.
+- CUDA OOM: lower `BATCH_SIZE`; optionally use a smaller model or gradient checkpointing (not enabled here).
+
+## Notes on the Raw Dataset
+
+- Original images are PNGs; shards store JPEGs (~95% quality) for efficiency.
+- Provided JSONs cover both train (~260k) and valid (~32k) entries.
+- WebDataset shards provide faster I/O and better shuffling at scale.
+
+## Acknowledgments
+
+- Built on top of `open-clip-torch` and `webdataset`.
