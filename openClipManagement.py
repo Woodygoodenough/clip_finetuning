@@ -1,76 +1,36 @@
 # %%
 from __future__ import annotations
 import open_clip
-from typing import Callable, List, Union
-from pathlib import Path
+from typing import Callable, List
 from PIL import Image
 import torch
-import pandas as pd
-from dataclasses import dataclass
-import matplotlib.pyplot as plt
 import settings
-
-
-# %%
-@dataclass
-class Record:
-    image_path: str
-    image_name: str
-    caption: str
-    category: str
-    product_id: int
-
-    @classmethod
-    def from_series(cls, series: pd.Series) -> Record:
-        return cls(**series.to_dict())
-
-
-@dataclass
-class Records:
-    records: List[Record]
-
-    @classmethod
-    def from_json(cls, path: str) -> Records:
-        return cls(
-            records=[
-                Record.from_series(series)
-                for _, series in pd.read_json(path).iterrows()
-            ]
-        )
-
-    def __len__(self):
-        return len(self.records)
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            return Records(records=self.records[index])
-        return self.records[index]
-
-    def to_df(self) -> pd.DataFrame:
-        return pd.DataFrame([record.__dict__ for record in self.records])
-
-    def get_image_paths(self) -> List[Union[str, Path]]:
-        return [record.image_path for record in self.records]
+from dBManagement import ClipDataset
+import webdataset as wds
 
 
 class OpenClipManagment:
     def __init__(self):
         self.model: open_clip.model.CLIP
-        self.preprocess: Callable
-        self.tokenizer: Callable
-        self.model, self.preprocess, _ = open_clip.create_model_and_transforms(
-            settings.MODEL_NAME, pretrained=settings.MODEL_PRETRAINED, cache_dir=settings.MODEL_CACHE_DIR
+        self.img_preprocess: Callable
+        self.txt_tokenizer: Callable
+        self.model, self.img_preprocess, _ = open_clip.create_model_and_transforms(
+            settings.MODEL_NAME,
+            pretrained=settings.MODEL_PRETRAINED,
+            cache_dir=settings.MODEL_CACHE_DIR,
         )
-        self.tokenizer = open_clip.get_tokenizer(settings.MODEL_NAME)
+        self.txt_tokenizer = open_clip.get_tokenizer(settings.MODEL_NAME)
         self.device = torch.device(settings.DEVICE)
         self.model = self.model.to(self.device)
-    
+
     @classmethod
     def from_checkpoint(cls, checkpoint_path: str):
         """Load model from checkpoint"""
-        checkpoint = torch.load(checkpoint_path, map_location=torch.device(settings.DEVICE))
+        checkpoint = torch.load(
+            checkpoint_path, map_location=torch.device(settings.DEVICE)
+        )
         model = cls()
-        model.model.load_state_dict(checkpoint['model_state_dict'])
+        model.model.load_state_dict(checkpoint["model_state_dict"])
         return model
 
     def view_params(self):
@@ -83,23 +43,33 @@ class OpenClipManagment:
             "Trainable Parameters": trainable_params,
         }
 
-    def encode_image_from_pil(self, images: List[Image.Image]):
+    def get_loader(self, dataset: ClipDataset) -> wds.WebLoader:
+        """
+        Create an optimal WebLoader that batches strings before tokenization.
+
+        This approach is better than per-sample tokenization because:
+        - CLIP tokenizer is designed for batch processing
+        - No dimension manipulation needed
+        - More efficient (single tokenization call per batch)
+
+        Returns loader that yields (img_tensors, text_strings) where:
+        - img_tensors: [batch, 3, 224, 224] (already tensors)
+        - text_strings: List[str] (strings to be tokenized in training loop)
+        """
+        return dataset.get_loader_with_strings(
+            batch_size=settings.BATCH_SIZE,
+            num_workers=settings.NUM_WORKERS,
+            img_transform=self.img_preprocess,
+        )
+
+    def encode_img_batch(self, images: List[Image.Image]) -> torch.Tensor:
         """Encode PIL images directly"""
-        img_tokens = []
-        for img in images:
-            img_token = img.convert("RGB") if hasattr(img, 'convert') else img
-            img_tokens.append(self.preprocess(img_token))
+        img_tokens = [self.img_preprocess(img) for img in images]
         batch = torch.stack(img_tokens).to(self.device)
         return self.model.encode_image(batch)
 
-    def encode_image(self, images: List[Union[str, Path]]):
-        """Encode images from image paths or PIL images"""
-        #get PIL images from image paths
-        pil_images = [Image.open(img) for img in images]
-        return self.encode_image_from_pil(pil_images)
-
-    def encode_text(self, texts: List[str]):
-        text_tokens = self.tokenizer(texts).to(self.device)  # shape: [batch, seq]
+    def encode_txt_batch(self, texts: List[str]) -> torch.Tensor:
+        text_tokens = self.txt_tokenizer(texts).to(self.device)  # shape: [batch, seq]
         return self.model.encode_text(text_tokens)
 
     def normalize_tensor(self, tensor: torch.Tensor):
@@ -107,36 +77,8 @@ class OpenClipManagment:
 
     def compare_similarity(self, text: str, image_path: str):
         with torch.no_grad():
-            text_tensor = self.normalize_tensor(self.encode_text([text]))
+            text_tensor = self.normalize_tensor(self.encode_txt_batch([text]))
             image_tensor = self.normalize_tensor(self.encode_image([image_path]))
             # .item() raises if not a scalar
             similarity = (text_tensor @ image_tensor.T).item()
             return similarity
-
-    def text_image_retrieval(self, query: str, dataset: Records, top_k: int = 5):
-        """Retrieve top-k most similar images for a text query"""
-        with torch.no_grad():
-            text_tensor = self.normalize_tensor(self.encode_text([query]))
-            image_tensors = self.normalize_tensor(
-                self.encode_image(dataset.get_image_paths())
-            )
-            similarities = (text_tensor @ image_tensors.T).squeeze(0)
-            top_indices = similarities.argsort(descending=True)[:top_k]
-            results = [
-                (dataset[i].image_path, similarities[i].item()) for i in top_indices
-            ]
-            return results
-
-
-# %%
-# small demo
-if __name__ == "__main__":
-    ds = Records.from_json("clip_dataset_valid.json")
-    oc = OpenClipManagment()
-    results = oc.text_image_retrieval("black pants", ds[:50])
-    ## show the images
-    for image_path, similarity in results:
-        image = Image.open(image_path)
-        plt.imshow(image)
-        plt.title(f"Similarity: {similarity:.2f}")
-        plt.show()
