@@ -1,6 +1,6 @@
 import torch
 
-ON_COLAB = True
+ON_COLAB = False
 # GPU-optimized batch size for T4 (16GB)
 # ViT-B-32: ~3-4GB per batch of 64
 # Start with 64, can increase to 96-128 if memory allows
@@ -31,16 +31,18 @@ if ON_COLAB:
     CHECKPOINT_DIR = "drive/MyDrive/6740 Group Project/checkpoints"
 else:
     CHECKPOINT_DIR = "./checkpoints"
+EVAL_CHECKPOINT = CHECKPOINT_DIR + "/final_checkpoint.pt"
 CHECKPOINT_INTERVAL = 1000
 if ON_COLAB:
     MAX_STEPS = None
 else:
     MAX_STEPS = 10
 
+
 ## dataset
 TRAIN_SHARDS_FILE = "clip_dataset_train.{000000..000260}.tar"
-VALID_SHARDS_FILE = "clip_dataset_valid.{000000..000016}.tar"
-TEST_SHARDS_FILE = "clip_dataset_valid.{000017..000032}.tar"
+VALID_SHARDS_FILE = "clip_dataset_valid.{000000..000006}.tar"
+TEST_SHARDS_FILE = "clip_dataset_valid.{000007..000032}.tar"
 if ON_COLAB:
     TRAIN_DATASET_PATTERN = f"drive/MyDrive/6740 Group Project/{TRAIN_SHARDS_FILE}"
     VALID_DATASET_PATTERN = f"drive/MyDrive/6740 Group Project/{VALID_SHARDS_FILE}"

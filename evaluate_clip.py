@@ -224,12 +224,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate CLIP model on validation set"
     )
+
     parser.add_argument(
-        "--checkpoint",
-        type=str,
-        default=None,
-        help="Path to model checkpoint (.pt file). If not provided, uses base pretrained model",
+        "-c",
+        "--use-checkpoint",
+        action="store_true",
+        help="Use checkpoint in settings.EVAL_CHECKPOINT, if not provided, uses base pretrained model",
     )
+
     parser.add_argument(
         "--dataset-path",
         type=str,
@@ -243,9 +245,9 @@ if __name__ == "__main__":
     logger.info("Initializing CLIP manager...")
 
     # Initialize evaluator and load checkpoint if provided
-    if args.checkpoint:
-        logger.info(f"Loading checkpoint from {args.checkpoint}")
-        clip_manager = OpenClipManagment.from_checkpoint(args.checkpoint)
+    if args.use_checkpoint:
+        logger.info(f"Loading checkpoint from {settings.EVAL_CHECKPOINT}")
+        clip_manager = OpenClipManagment.from_checkpoint(settings.EVAL_CHECKPOINT)
     else:
         logger.info("No checkpoint provided, using base pretrained model")
         clip_manager = OpenClipManagment()
@@ -269,7 +271,7 @@ if __name__ == "__main__":
     print_results(results)
 
     # Save results to file
-    if args.checkpoint:
+    if args.use_checkpoint:
         results_file = Path("evaluation_results_checkpoint.json")
     else:
         results_file = Path("evaluation_results.json")
