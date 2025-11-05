@@ -8,17 +8,15 @@ Metrics:
 """
 
 import torch
-from typing import List, Tuple, Optional
+from typing import Tuple
 import settings
-import webdataset as wds
 import logging
 from pathlib import Path
 from openClipManagement import OpenClipManagment
 import numpy as np
 import argparse
 import json
-from typing import Union
-from PIL import Image
+from dBManagement import ClipDataset
 
 # Set up logging
 logging.basicConfig(
@@ -30,59 +28,25 @@ logger = logging.getLogger(__name__)
 class CLIPEvaluator:
     """Evaluator for CLIP model with recall metrics"""
 
-    def __init__(self, clip_manager: OpenClipManagment):
+    def __init__(
+        self,
+        clip_manager: OpenClipManagment,
+        clip_dataset: ClipDataset = ClipDataset(
+            dataset_pattern=settings.VALID_DATASET_PATTERN
+        ),
+    ):
         """
         Initialize evaluator
         Args:
             clip_manager: CLIP manager instance
+            clip_dataset: ClipDataset instance
         """
         self.clip = clip_manager
+        self.clip_dataset = clip_dataset
         self.device = self.clip.device
 
         # Set model to eval mode
         self.clip.model.eval()
-
-    def encode_images_batch(
-        self, images: List[Image.Image], batch_size: int = 32
-    ) -> torch.Tensor:
-        """
-        Encode images in batches for memory efficiency
-        Args:
-            images: List of PIL Images
-            batch_size: Batch size for encoding
-        Returns:
-            Tensor of image embeddings [N, dim]
-        """
-        all_embeds = []
-
-        with torch.no_grad():
-            for i in range(0, len(images), batch_size):
-                batch_images = images[i : i + batch_size]
-                batch_embeds = self.clip.encode_img_batch(batch_images)
-                all_embeds.append(batch_embeds)
-
-        return torch.cat(all_embeds, dim=0)
-
-    def encode_texts_batch(
-        self, texts: List[str], batch_size: int = 32
-    ) -> torch.Tensor:
-        """
-        Encode texts in batches for memory efficiency
-        Args:
-            texts: List of texts
-            batch_size: Batch size for encoding
-        Returns:
-            Tensor of text embeddings [N, dim]
-        """
-        all_embeds = []
-
-        with torch.no_grad():
-            for i in range(0, len(texts), batch_size):
-                batch_texts = texts[i : i + batch_size]
-                batch_embeds = self.clip.encode_txt_batch(batch_texts)
-                all_embeds.append(batch_embeds)
-
-        return torch.cat(all_embeds, dim=0)
 
     def compute_similarity_matrix(
         self, image_embeds: torch.Tensor, text_embeds: torch.Tensor
@@ -151,53 +115,62 @@ class CLIPEvaluator:
 
         return text_to_image_recall, image_to_text_recall
 
-    def evaluate_webdataset(
-        self, dataset_pattern: str, max_samples: Optional[int] = None
-    ) -> dict:
+    def evaluate_with_loader(self) -> dict:
         """
-        Evaluate model on WebDataset validation set
+        Evaluate model on validation set using efficient WebDataset loader.
+
+        This approach is optimal because:
+        - Uses the same efficient pipeline as training
+        - Processes data in batches directly from disk
+        - More memory efficient (doesn't load all data at once)
+        - Consistent with training data flow
 
         Args:
-            dataset_pattern: Pattern for WebDataset shards
             max_samples: Maximum number of samples to evaluate (None for all)
 
         Returns:
             Dictionary with evaluation metrics
         """
-        logger.info(f"Loading validation dataset from {dataset_pattern}")
+        logger.info("Creating efficient WebDataset loader for evaluation...")
 
-        # Load dataset
-        dataset = (
-            wds.WebDataset(dataset_pattern, empty_check=False)
-            .decode("pil")
-            .to_tuple("jpg", "txt")
-            .map_tuple(
-                lambda img: img,
-                lambda txt: txt.decode("utf-8") if isinstance(txt, bytes) else txt,
-            )
-        )
+        # Get loader using the same approach as training
+        loader = self.clip.get_loader(self.clip_dataset)
 
-        # Collect all image-text pairs
-        images = []
-        texts = []
+        # Collect embeddings batch by batch
+        image_embeds_list = []
+        text_embeds_list = []
+        num_samples = 0
 
-        logger.info("Collecting validation samples...")
-        for i, (img, txt) in enumerate(dataset):
-            if max_samples and i >= max_samples:
-                break
-            images.append(img)
-            texts.append(txt)
-            if (i + 1) % 1000 == 0:
-                logger.info(f"Collected {i + 1} samples...")
+        logger.info("Processing batches and computing embeddings...")
+        with torch.no_grad():
+            for batch_idx, (img_tensors, text_strings) in enumerate(loader):
+                # Move images to device
+                img_tensors = img_tensors.to(self.device)
 
-        logger.info(f"Total samples collected: {len(images)}")
+                # Tokenize text batch (same as training)
+                txt_tensors = self.clip.txt_tokenizer(text_strings).to(self.device)
 
-        # Encode images and texts in batches
-        logger.info("Encoding images...")
-        image_embeds = self.encode_images_batch(images, batch_size=settings.BATCH_SIZE)
+                # Encode batch
+                img_embeds = self.clip.model.encode_image(img_tensors)
+                txt_embeds = self.clip.model.encode_text(txt_tensors)
 
-        logger.info("Encoding texts...")
-        text_embeds = self.encode_texts_batch(texts, batch_size=settings.BATCH_SIZE)
+                image_embeds_list.append(img_embeds.cpu())
+                text_embeds_list.append(txt_embeds.cpu())
+
+                num_samples += len(img_embeds)
+
+                if (batch_idx + 1) % 10 == 0:
+                    logger.info(f"Processed {num_samples} samples...")
+
+        logger.info(f"Total samples processed: {num_samples}")
+
+        # Concatenate all embeddings
+        image_embeds = torch.cat(image_embeds_list, dim=0)
+        text_embeds = torch.cat(text_embeds_list, dim=0)
+
+        # Move to device for similarity computation
+        image_embeds = image_embeds.to(self.device)
+        text_embeds = text_embeds.to(self.device)
 
         logger.info("Computing similarity matrix...")
         similarity_matrix = self.compute_similarity_matrix(image_embeds, text_embeds)
@@ -210,7 +183,7 @@ class CLIPEvaluator:
         recall10_t2i, recall10_i2t = self.recall_at_k(similarity_matrix, k=10)
 
         results = {
-            "num_samples": len(images),
+            "num_samples": num_samples,
             "recall@5": {
                 "text_to_image": recall5_t2i,
                 "image_to_text": recall5_i2t,
@@ -276,7 +249,6 @@ if __name__ == "__main__":
     else:
         logger.info("No checkpoint provided, using base pretrained model")
         clip_manager = OpenClipManagment()
-    evaluator = CLIPEvaluator(clip_manager)
 
     # Determine dataset path
     if args.dataset_path:
@@ -284,10 +256,14 @@ if __name__ == "__main__":
     else:
         dataset_path = settings.VALID_DATASET_PATTERN
 
-    # Evaluate
-    results = evaluator.evaluate_webdataset(
-        dataset_path, max_samples=settings.MAX_VALID_SAMPLES
-    )
+    logger.info(f"Loading validation dataset from {dataset_path}")
+    clip_dataset = ClipDataset(dataset_path)
+
+    # Create evaluator
+    evaluator = CLIPEvaluator(clip_manager, clip_dataset)
+
+    # Evaluate using efficient WebDataset loader
+    results = evaluator.evaluate_with_loader()
 
     # Print results
     print_results(results)

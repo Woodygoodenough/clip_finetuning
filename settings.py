@@ -1,6 +1,6 @@
 import torch
 
-ON_COLAB = False
+ON_COLAB = True
 # GPU-optimized batch size for T4 (16GB)
 # ViT-B-32: ~3-4GB per batch of 64
 # Start with 64, can increase to 96-128 if memory allows
@@ -38,18 +38,14 @@ else:
     MAX_STEPS = 10
 
 ## dataset
+TRAIN_SHARDS_FILE = "clip_dataset_train.{000000..000260}.tar"
+VALID_SHARDS_FILE = "clip_dataset_valid.{000000..000016}.tar"
+TEST_SHARDS_FILE = "clip_dataset_valid.{000017..000032}.tar"
 if ON_COLAB:
-    TRAIN_DATASET_PATTERN = (
-        "drive/MyDrive/6740 Group Project/clip_dataset_train.{000000..000260}.tar"
-    )
-    VALID_DATASET_PATTERN = (
-        "drive/MyDrive/6740 Group Project/clip_dataset_valid.{000000..000032}.tar"
-    )
+    TRAIN_DATASET_PATTERN = f"drive/MyDrive/6740 Group Project/{TRAIN_SHARDS_FILE}"
+    VALID_DATASET_PATTERN = f"drive/MyDrive/6740 Group Project/{VALID_SHARDS_FILE}"
+    TEST_DATASET_PATTERN = f"drive/MyDrive/6740 Group Project/{TEST_SHARDS_FILE}"
 else:
-    TRAIN_DATASET_PATTERN = (
-        "./webdataset_shards/clip_dataset_train.{000000..000260}.tar"
-    )
-    VALID_DATASET_PATTERN = (
-        "./webdataset_shards/clip_dataset_valid.{000000..000032}.tar"
-    )
-MAX_VALID_SAMPLES = 5000
+    TRAIN_DATASET_PATTERN = f"./webdataset_shards/{TRAIN_SHARDS_FILE}"
+    VALID_DATASET_PATTERN = f"./webdataset_shards/{VALID_SHARDS_FILE}"
+    TEST_DATASET_PATTERN = f"./webdataset_shards/{TEST_SHARDS_FILE}"

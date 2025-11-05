@@ -74,11 +74,3 @@ class OpenClipManagment:
 
     def normalize_tensor(self, tensor: torch.Tensor):
         return tensor / tensor.norm(dim=-1, keepdim=True)
-
-    def compare_similarity(self, text: str, image_path: str):
-        with torch.no_grad():
-            text_tensor = self.normalize_tensor(self.encode_txt_batch([text]))
-            image_tensor = self.normalize_tensor(self.encode_image([image_path]))
-            # .item() raises if not a scalar
-            similarity = (text_tensor @ image_tensor.T).item()
-            return similarity
