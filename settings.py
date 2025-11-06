@@ -13,7 +13,8 @@ TOTAL_VALID = 32528
 ## model parameters
 # MODEL_NAME = "ViT-B-32"
 MODEL_NAME = "ViT-B-16"
-MODEL_PRETRAINED = "laion2b_s34b_b79k"
+# MODEL_PRETRAINED = "laion2b_s34b_b79k"
+MODEL_PRETRAINED = "laion2b_s34b_b88k"
 MODEL_CACHE_DIR = "./openclip_cache"
 
 ## device
