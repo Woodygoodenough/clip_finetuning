@@ -1,6 +1,6 @@
 import torch
 
-ON_COLAB = False
+ON_COLAB = True
 # GPU-optimized batch size for T4 (16GB)
 # ViT-B-32: ~3-4GB per batch of 64
 # Start with 64, can increase to 96-128 if memory allows
@@ -11,7 +11,8 @@ TOTAL_TRAIN = 260490
 TOTAL_VALID = 32528
 
 ## model parameters
-MODEL_NAME = "ViT-B-32"
+# MODEL_NAME = "ViT-B-32"
+MODEL_NAME = "ViT-B-16"
 MODEL_PRETRAINED = "laion2b_s34b_b79k"
 MODEL_CACHE_DIR = "./openclip_cache"
 
