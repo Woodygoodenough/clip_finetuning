@@ -102,7 +102,7 @@ class CLIPFineTuner:
             loss = self.train_step(img_tensors, text_strings)
             if step % 10 == 0:
                 logger.info(f"Step {step}, Loss: {loss:.4f}")
-            if step % settings.CHECKPOINT_INTERVAL == 0:
+            if step % settings.CHECKPOINT_INTERVAL == 0 and step > 0:
                 checkpoint_file = checkpoint_path / f"checkpoint_step_{step}.pt"
                 self.save_checkpoint(
                     str(checkpoint_file), additional_info={"step": step, "loss": loss}
