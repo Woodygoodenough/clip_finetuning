@@ -22,7 +22,8 @@ class ModelConfig:
     name: str
 
 
-class OpenClipModel(Enum):
+@dataclass
+class OpenClipModel:
     ViT_B_32 = ModelConfig(pretrained="laion2b_s34b_b79k", name="ViT-B-32")
     ViT_B_16 = ModelConfig(pretrained="laion2b_s34b_b88k", name="ViT-B-16")
     ViT_SigLIP_2_16 = ModelConfig(pretrained="webli", name="ViT-B-16-SigLIP2-256")
