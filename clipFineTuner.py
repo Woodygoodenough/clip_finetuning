@@ -1,19 +1,16 @@
 # %%
-from tabnanny import check
 from openClipManagement import OpenClipManagment
 import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast, GradScaler  # Mixed precision for T4 GPU
-from typing import Optional, List
+from typing import Callable, List, Optional, Tuple
 import logging
-from pathlib import Path
 from dBManagement import ClipDataset
-import settings
-import webdataset as wds
+from config import ProjectConfig, LossFunction
 from evaluate_clip import CLIPEvaluator, print_results, save_results
-from typing import Tuple
 import torch.nn.functional as F
-from typing import Callable
+import argparse
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(
@@ -28,28 +25,28 @@ logger = logging.getLogger(__name__)
 class CLIPFineTuner:
     def __init__(
         self,
+        *,
         clip_manager: OpenClipManagment,
         clip_dataset: ClipDataset,
-        learning_rate: float = settings.LEARNING_RATE,
+        config: ProjectConfig,
     ):
         self.clip = clip_manager
         self.clip_dataset = clip_dataset
+        self.config = config
         self.optimizer = torch.optim.AdamW(
-            self.clip.model.parameters(), lr=learning_rate
+            self.clip.model.parameters(), lr=self.config.training.learning_rate
         )
         self.loss_fn = nn.CrossEntropyLoss()
         self.device = self.clip.device
         # Mixed precision scaler for T4 GPU optimization
         # Enables ~2x faster training with ~50% less memory usage
         self.scaler = GradScaler()
+        self.best_eval_score: float = float("-inf")
+        self.best_checkpoint_path: Optional[Path] = None
 
     def contrastive_loss(
         self, image_embeds: torch.Tensor, text_embeds: torch.Tensor
     ) -> torch.Tensor:
-        raise NotImplementedError(
-            "For now, we want to try siglip loss. So we temporarily disable contrastive loss in case it is somehow wired in."
-        )
-        """Compute CLIP contrastive loss"""
         image_embeds = self.clip.normalize_tensor(image_embeds)
         text_embeds = self.clip.normalize_tensor(text_embeds)
 
@@ -111,43 +108,66 @@ class CLIPFineTuner:
 
         return loss.item()
 
-    def train(self, loader: wds.WebLoader):
-        checkpoint_path = Path(settings.CHECKPOINT_DIR)
+    def train(self):
+        checkpoint_path = self.config.paths.checkpoint_dir
         checkpoint_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Checkpoint directory: {checkpoint_path.absolute()}")
-        step = -1
-        loss = None
-        # we use recall@10 for both text-to-image and image-to-text, only save when both are improved
-        best_recall_t2i = 0.0
-        best_recall_i2t = 0.0
-        if settings.LOSS_FUNCTION == settings.LossFunction.CONTRASTIVE:
+
+        if self.config.loss_function == LossFunction.CONTRASTIVE:
             loss_fn = self.contrastive_loss
-        elif settings.LOSS_FUNCTION == settings.LossFunction.SIGLIP:
+        elif self.config.loss_function == LossFunction.SIGLIP:
             loss_fn = self.siglip_loss
         else:
-            raise ValueError(f"Invalid loss function: {settings.LOSS_FUNCTION}")
-        for step, (img_tensors, text_strings) in enumerate(loader):
-            if settings.MAX_STEPS is not None and step >= settings.MAX_STEPS:
-                logger.info(
-                    f"Reached maximum step limit ({settings.MAX_STEPS}). Stopping training."
-                )
+            raise ValueError(f"Invalid loss function: {self.config.loss_function}")
+
+        epochs = self.config.training.epochs
+        max_steps = self.config.training.max_steps
+        checkpoint_interval = self.config.training.checkpoint_interval
+
+        global_step = -1
+        stop_training = False
+
+        for epoch in range(epochs):
+            logger.info("=" * 50)
+            logger.info(f"Epoch {epoch + 1} of {epochs}")
+            logger.info("=" * 50)
+
+            epoch_loader = self.clip.get_loader(self.clip_dataset)
+
+            for batch_idx, (img_tensors, text_strings) in enumerate(epoch_loader):
+                global_step += 1
+
+                if max_steps is not None and global_step >= max_steps:
+                    logger.info(
+                        f"Reached maximum step limit ({max_steps}). Stopping training."
+                    )
+                    stop_training = True
+                    break
+
+                # Skip empty batches
+                if len(img_tensors) == 0 or len(text_strings) == 0:
+                    continue
+
+                loss = self.train_step(img_tensors, text_strings, loss_fn)
+
+                if global_step % 10 == 0:
+                    logger.info(
+                        f"Epoch {epoch + 1}, Batch {batch_idx}, Global Step {global_step}, Loss: {loss:.4f}"
+                    )
+
+                if (
+                    checkpoint_interval
+                    and global_step > 0
+                    and global_step % checkpoint_interval == 0
+                ):
+                    self.periodic_checkpoint_evaluation(global_step)
+
+            if stop_training:
                 break
-            # Skip empty batches
-            if len(img_tensors) == 0 or len(text_strings) == 0:
-                continue
-            loss = self.train_step(img_tensors, text_strings, loss_fn)
-            if step % 10 == 0:
-                logger.info(f"Step {step}, Loss: {loss:.4f}")
-            if step % settings.CHECKPOINT_INTERVAL == 0 and step > 0:
-                # we evaluate the model at this step
-                best_recall_t2i, best_recall_i2t = self.periodic_checkpoint_evaluation(
-                    step, best_recall_t2i, best_recall_i2t
-                )
 
         # Save final checkpoint after training completes
-        if step >= 0:
-            # we also evaluate the model at the final step
-            self.periodic_checkpoint_evaluation(step, best_recall_t2i, best_recall_i2t)
+        if global_step >= 0:
+            self.periodic_checkpoint_evaluation(global_step)
         logger.info("Training completed!")
 
     def save_checkpoint(
@@ -163,48 +183,97 @@ class CLIPFineTuner:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scaler_state_dict": self.scaler.state_dict(),
         }
-        checkpoint_dir = Path(settings.CHECKPOINT_DIR)
+        checkpoint_dir = Path(self.config.paths.checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         if additional_info:
             checkpoint.update(additional_info)
         torch.save(checkpoint, checkpoint_dir / checkpoint_name)
         logger.info(f"Checkpoint saved to {checkpoint_dir / checkpoint_name}")
 
-    def periodic_checkpoint_evaluation(
-        self, step: int, best_recall_t2i: float, best_recall_i2t: float
-    ) -> Tuple[float, float]:
-        # we evaluate the model and save the best checkpoint when both recall@10 are improved
-        evaluator = CLIPEvaluator(self.clip)
-        result = evaluator.evaluate_with_loader()
-        print_results(result)
-        result_name = f"eval_{settings.MODEL_CHOSEN.name}_step_{step}.json"
-        save_results(result, result_name)
-        logger.info(f"Evaluation results saved to {result_name}")
-        result_t2i = result["recall@10"]["text_to_image"]
-        result_i2t = result["recall@10"]["image_to_text"]
-        if result_t2i > best_recall_t2i and result_i2t > best_recall_i2t:
-            best_recall_t2i = result_t2i
-            best_recall_i2t = result_i2t
-            logger.info(
-                f"New best recall@10: {best_recall_t2i:.4f} (text-to-image) and {best_recall_i2t:.4f} (image-to-text)"
+    def periodic_checkpoint_evaluation(self, step: int) -> None:
+        logger.info(f"Running evaluation at global step {step}...")
+        split_patterns = {
+            "train": self.config.train_eval_dataset_pattern,
+            "valid": self.config.valid_eval_dataset_pattern,
+            "test": self.config.test_eval_dataset_pattern,
+        }
+
+        evaluation_results = {}
+
+        for split, pattern in split_patterns.items():
+            logger.info(f"Evaluating {split} subset: {pattern}")
+            dataset = ClipDataset(
+                config=self.config,
+                dataset_pattern=pattern,
+                shardshuffle=False,
             )
-            checkpoint_name = f"ck_{settings.MODEL_CHOSEN.name}_step_{step}.pt"
-            self.save_checkpoint(checkpoint_name)
-            logger.info(f"Periodic checkpoint saved at step {step}")
+            evaluator = CLIPEvaluator(
+                config=self.config,
+                clip_manager=self.clip,
+                evaluation_dataset=dataset,
+            )
+            split_result = evaluator.evaluate_with_loader()
+            evaluation_results[split] = split_result
+            print(f"\n*** {split.upper()} METRICS ***")
+            print_results(split_result)
+
+        results_payload = {
+            "step": step,
+            "loss_function": self.config.loss_function.value,
+            "splits": evaluation_results,
+        }
+        result_name = f"eval_{self.config.model.name}_step_{step}.json"
+        save_results(self.config, results_payload, result_name)
+        logger.info(f"Evaluation results saved to {result_name}")
+
+        valid_results = evaluation_results["valid"]
+        eval_recall_t2i = valid_results["recall@10"]["text_to_image"]
+        eval_recall_i2t = valid_results["recall@10"]["image_to_text"]
+        eval_score = (eval_recall_t2i + eval_recall_i2t) / 2.0
+
+        if eval_score > self.best_eval_score:
+            logger.info(
+                f"Validation recall@10 average improved from {self.best_eval_score:.4f} to {eval_score:.4f}. Saving checkpoint."
+            )
+            if self.best_checkpoint_path and self.best_checkpoint_path.exists():
+                logger.info(
+                    f"Removing previous best checkpoint: {self.best_checkpoint_path}"
+                )
+                self.best_checkpoint_path.unlink()
+            checkpoint_name = f"ck_{self.config.model.name}_step_{step}.pt"
+            self.save_checkpoint(
+                checkpoint_name,
+                additional_info={
+                    "step": step,
+                    "eval_recall@10_text_to_image": eval_recall_t2i,
+                    "eval_recall@10_image_to_text": eval_recall_i2t,
+                    "eval_loss": valid_results["loss"],
+                    "eval_loss_type": valid_results["loss_type"],
+                },
+            )
+            self.best_checkpoint_path = (
+                Path(self.config.paths.checkpoint_dir) / checkpoint_name
+            )
+            self.best_eval_score = eval_score
         else:
             logger.info(
-                f"Recall@10: {result_t2i:.4f} (text-to-image) and {result_i2t:.4f} (image-to-text) is not better than best recall@10: {best_recall_t2i:.4f} (text-to-image) and {best_recall_i2t:.4f} (image-to-text)"
+                f"Validation recall@10 average {eval_score:.4f} did not exceed best {self.best_eval_score:.4f}; checkpoint not updated."
             )
-        return best_recall_t2i, best_recall_i2t
 
 
-def training_prep():
+def training_prep(config: ProjectConfig):
     logger.info("Initializing CLIP manager and fine-tuner...")
-    logger.info(f"Model: {settings.MODEL_CHOSEN}")
-    logger.info(f"Loss function: {settings.LOSS_FUNCTION}")
-    clip = OpenClipManagment()
-    clip_dataset = ClipDataset(settings.TRAIN_DATASET_PATTERN)
-    finetuner = CLIPFineTuner(clip, clip_dataset, learning_rate=settings.LEARNING_RATE)
+    logger.info(f"Model: {config.model.name} ({config.model.pretrained})")
+    logger.info(f"Loss function: {config.loss_function.value}")
+    clip = OpenClipManagment(config=config)
+    clip_dataset = ClipDataset(
+        config=config, dataset_pattern=config.train_dataset_pattern
+    )
+    finetuner = CLIPFineTuner(
+        clip_manager=clip,
+        clip_dataset=clip_dataset,
+        config=config,
+    )
     # Log GPU optimizations
     device_info = f"Device: {finetuner.device}"
     if torch.cuda.is_available():
@@ -212,23 +281,65 @@ def training_prep():
         gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
         device_info += f" | GPU: {gpu_name} ({gpu_memory:.1f} GB)"
     logger.info(
-        f"Training configuration: {device_info} | Batch Size: {settings.BATCH_SIZE} | Workers: {settings.NUM_WORKERS} | Mixed Precision: Enabled"
+        f"Training configuration: {device_info} | Batch Size: {config.training.batch_size} | Workers: {config.training.num_workers} | Mixed Precision: Enabled"
     )
-    logger.info(f"Loading dataset from {settings.TRAIN_DATASET_PATTERN}")
-    loader = finetuner.clip.get_loader(clip_dataset)
-
-    max_steps_msg = (
-        f" (limited to {settings.MAX_STEPS} steps)" if settings.MAX_STEPS else ""
-    )
+    logger.info(f"Loading dataset from {config.train_dataset_pattern}")
+    max_steps = config.training.max_steps
+    max_steps_msg = f" (limited to {max_steps} steps)" if max_steps else ""
     logger.info(f"Starting training{max_steps_msg}...")
 
-    return finetuner, loader
+    return finetuner
 
 
 if __name__ == "__main__":
     try:
-        finetuner, loader = training_prep()
-        finetuner.train(loader)
+        parser = argparse.ArgumentParser(
+            description="Fine-tune an OpenCLIP model with explicit configuration."
+        )
+        parser.add_argument(
+            "--model",
+            type=str,
+            help="Model key to instantiate (e.g., ViT_SigLIP_2_16). Required unless --checkpoint is provided.",
+        )
+        parser.add_argument(
+            "--checkpoint",
+            type=str,
+            default=None,
+            help="Path to a checkpoint to resume from.",
+        )
+        parser.add_argument(
+            "--checkpoint-model",
+            type=str,
+            default=None,
+            help="Model key describing the architecture stored in the checkpoint (required with --checkpoint).",
+        )
+        parser.add_argument(
+            "--config-path",
+            type=str,
+            default=None,
+            help="Optional path to a JSON config override (not yet implemented).",
+        )
+
+        args = parser.parse_args()
+
+        checkpoint_path = Path(args.checkpoint) if args.checkpoint else None
+        if checkpoint_path:
+            if not args.checkpoint_model:
+                parser.error(
+                    "--checkpoint-model is required when --checkpoint is provided."
+                )
+            project_config = ProjectConfig(
+                model="from_checkpoint",
+                checkpoint_path=checkpoint_path,
+                checkpoint_model=args.checkpoint_model,
+            )
+        else:
+            if not args.model:
+                parser.error("--model is required when not loading from checkpoint.")
+            project_config = ProjectConfig(model=args.model)
+
+        finetuner = training_prep(project_config)
+        finetuner.train()
     except Exception as e:
         logger.error(f"Error during training: {e}", exc_info=True)
         raise

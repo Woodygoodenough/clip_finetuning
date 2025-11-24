@@ -1,8 +1,9 @@
 import webdataset as wds
-import settings
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from PIL import Image
 from typing import Callable
+
+from config import ProjectConfig
 
 record_pair = Tuple[Image.Image, str]
 
@@ -17,13 +18,18 @@ class ClipDataset:
 
     def __init__(
         self,
-        dataset_pattern: str = settings.VALID_DATASET_PATTERN,
-        shardshuffle: bool = False,
+        *,
+        config: ProjectConfig,
+        dataset_pattern: Optional[str] = None,
+        shardshuffle: Optional[bool] = None,
     ):
-        self._pattern = dataset_pattern
-        self._shardshuffle = shardshuffle
+        self.config = config
+        self._pattern = dataset_pattern or self.config.valid_dataset_pattern
+        shuffle = (
+            self.config.datasets.shardshuffle if shardshuffle is None else shardshuffle
+        )
         self._dataset = (
-            wds.WebDataset(dataset_pattern, shardshuffle=shardshuffle)
+            wds.WebDataset(self._pattern, shardshuffle=shuffle)
             .decode(wds.autodecode.imagehandler("pil"), wds.autodecode.basichandlers)
             .to_tuple("jpg", "txt")
         )
@@ -38,8 +44,8 @@ class ClipDataset:
 
     def get_loader_with_strings(
         self,
-        batch_size: int = settings.BATCH_SIZE,
-        num_workers: int = settings.NUM_WORKERS,
+        batch_size: Optional[int] = None,
+        num_workers: Optional[int] = None,
         img_transform: Callable = None,
     ) -> wds.WebLoader:
         """
@@ -59,6 +65,9 @@ class ClipDataset:
             raise ValueError(
                 "img_transform must be provided to convert PIL images to tensors."
             )
+
+        batch_size = batch_size or self.config.training.batch_size
+        num_workers = num_workers or self.config.training.num_workers
 
         # Only transform images; keep text as strings for batch tokenization
         return wds.WebLoader(

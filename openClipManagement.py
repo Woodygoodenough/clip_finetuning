@@ -4,35 +4,42 @@ import open_clip
 from typing import Callable, List
 from PIL import Image
 import torch
-import settings
+from config import ProjectConfig
 from dBManagement import ClipDataset
 import webdataset as wds
 
 
 class OpenClipManagment:
-    def __init__(self):
+    def __init__(self, *, config: ProjectConfig):
+        self.config = config
         self.model: open_clip.model.CLIP
         self.img_preprocess: Callable
         self.txt_tokenizer: Callable
-        self.model_config = settings.MODEL_CHOSEN
+        self.model_config = self.config.get_model()
         self.model, self.img_preprocess, _ = open_clip.create_model_and_transforms(
             self.model_config.name,
             pretrained=self.model_config.pretrained,
-            cache_dir=settings.MODEL_CACHE_DIR,
+            cache_dir=str(self.config.paths.model_cache_dir),
         )
         self.txt_tokenizer = open_clip.get_tokenizer(self.model_config.name)
-        self.device = torch.device(settings.DEVICE)
+        self.device = torch.device(self.config.device)
         self.model = self.model.to(self.device)
 
-    @classmethod
-    def from_checkpoint(cls, checkpoint_path: str):
-        """Load model from checkpoint"""
-        checkpoint = torch.load(
-            checkpoint_path, map_location=torch.device(settings.DEVICE)
+        if self.config.should_load_checkpoint:
+            self._load_checkpoint_weights()
+
+    def _load_checkpoint_weights(self) -> None:
+        if self.config.checkpoint_path is None:
+            raise ValueError(
+                "checkpoint_path must be set when loading from checkpoint."
+            )
+        checkpoint = torch.load(self.config.checkpoint_path, map_location=self.device)
+        state_dict = (
+            checkpoint["model_state_dict"]
+            if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint
+            else checkpoint
         )
-        model = cls()
-        model.model.load_state_dict(checkpoint["model_state_dict"])
-        return model
+        self.model.load_state_dict(state_dict)
 
     def view_params(self):
         total_params = sum(p.numel() for p in self.model.parameters())
@@ -58,8 +65,8 @@ class OpenClipManagment:
         - text_strings: List[str] (strings to be tokenized in training loop)
         """
         return dataset.get_loader_with_strings(
-            batch_size=settings.BATCH_SIZE,
-            num_workers=settings.NUM_WORKERS,
+            batch_size=self.config.training.batch_size,
+            num_workers=self.config.training.num_workers,
             img_transform=self.img_preprocess,
         )
 

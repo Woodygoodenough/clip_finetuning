@@ -8,8 +8,9 @@ Metrics:
 """
 
 import torch
-from typing import Tuple
-import settings
+import torch.nn.functional as F
+from typing import Optional, Tuple
+from config import ProjectConfig, LossFunction
 import logging
 from pathlib import Path
 from openClipManagement import OpenClipManagment
@@ -31,19 +32,16 @@ class CLIPEvaluator:
 
     def __init__(
         self,
+        *,
+        config: ProjectConfig,
         clip_manager: OpenClipManagment,
-        evaluation_dataset: ClipDataset = ClipDataset(
-            dataset_pattern=settings.VALID_DATASET_PATTERN
-        ),
+        evaluation_dataset: Optional[ClipDataset] = None,
     ):
-        """
-        Initialize evaluator
-        Args:
-            clip_manager: CLIP manager instance
-            clip_dataset: ClipDataset instance
-        """
+        self.config = config
         self.clip = clip_manager
-        self.clip_dataset = evaluation_dataset
+        self.clip_dataset = evaluation_dataset or ClipDataset(
+            config=config, dataset_pattern=config.valid_dataset_pattern
+        )
         self.device = self.clip.device
 
         # Set model to eval mode
@@ -68,6 +66,18 @@ class CLIPEvaluator:
         similarity = image_embeds @ text_embeds.T  # [N_images, N_texts]
 
         return similarity
+
+    def compute_loss(self, logits: torch.Tensor) -> Tuple[torch.Tensor, str]:
+        if self.config.loss_function == LossFunction.SIGLIP:
+            targets = torch.eye(logits.size(0), device=logits.device)
+            loss = F.binary_cross_entropy_with_logits(logits, targets)
+            return loss, "siglip_bce"
+        if self.config.loss_function == LossFunction.CONTRASTIVE:
+            labels = torch.arange(logits.size(0), device=logits.device)
+            loss_i = F.cross_entropy(logits, labels)
+            loss_t = F.cross_entropy(logits.T, labels)
+            return (loss_i + loss_t) / 2, "clip_contrastive"
+        raise ValueError(f"Unsupported loss function: {self.config.loss_function}")
 
     def recall_at_k(
         self, similarity_matrix: torch.Tensor, k: int = 5
@@ -160,16 +170,21 @@ class CLIPEvaluator:
 
         logger.info("Computing similarity matrix...")
         similarity_matrix = self.compute_similarity_matrix(image_embeds, text_embeds)
+        logit_scale = self.clip.model.logit_scale.exp()
+        logits = similarity_matrix * logit_scale
+        loss_value, loss_name = self.compute_loss(logits)
 
         # Compute Recall@5 and Recall@10
         logger.info("Computing Recall@5...")
-        recall5_t2i, recall5_i2t = self.recall_at_k(similarity_matrix, k=5)
+        recall5_t2i, recall5_i2t = self.recall_at_k(logits, k=5)
 
         logger.info("Computing Recall@10...")
-        recall10_t2i, recall10_i2t = self.recall_at_k(similarity_matrix, k=10)
+        recall10_t2i, recall10_i2t = self.recall_at_k(logits, k=10)
 
         results = {
             "num_samples": num_samples,
+            "loss": loss_value.item(),
+            "loss_type": loss_name,
             "recall@5": {
                 "text_to_image": recall5_t2i,
                 "image_to_text": recall5_i2t,
@@ -189,6 +204,8 @@ def print_results(results: dict):
     print("EVALUATION RESULTS")
     print("=" * 60)
     print(f"Number of samples evaluated: {results['num_samples']}")
+    if "loss" in results:
+        print(f"Loss ({results.get('loss_type', 'n/a')}): {results['loss']:.6f}")
     print("\nRecall@5:")
     print(
         f"  Text-to-Image: {results['recall@5']['text_to_image']:.4f} ({results['recall@5']['text_to_image']*100:.2f}%)"
@@ -206,12 +223,13 @@ def print_results(results: dict):
     print("=" * 60 + "\n")
 
 
-def save_results(results: dict, file_name: str):
+def save_results(config: ProjectConfig, results: dict, file_name: str):
     """Save evaluation results to a file"""
     # mkdir if not exists
-    if not os.path.exists(settings.EVAL_DIR):
-        os.makedirs(settings.EVAL_DIR)
-    file_path = Path(settings.EVAL_DIR) / file_name
+    eval_dir = config.paths.evaluation_dir
+    if not os.path.exists(eval_dir):
+        os.makedirs(eval_dir)
+    file_path = Path(eval_dir) / file_name
     with open(file_path, "w") as f:
         json.dump(results, f, indent=2)
     logger.info(f"Results saved to {file_path.absolute()}")
@@ -230,40 +248,72 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--checkpoint-model",
+        type=str,
+        default=None,
+        help="Model key to instantiate when loading from checkpoint (required if --checkpoint is provided)",
+    )
+
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model key to evaluate (required when --checkpoint is not provided).",
+    )
+
+    parser.add_argument(
         "--dataset-path",
         type=str,
         default=None,
-        help="Path to dataset (WebDataset pattern). Defaults to settings.VALID_DATASET_PATTERN",
+        help="Path to dataset (WebDataset pattern). Defaults to configured validation pattern",
     )
 
     args = parser.parse_args()
 
-    # Initialize CLIP manager
-    logger.info("Initializing CLIP manager...")
-
-    # Initialize evaluator and load checkpoint if provided
     checkpoint_path = args.checkpoint
 
     if checkpoint_path:
+        if not args.checkpoint_model:
+            parser.error(
+                "--checkpoint-model is required when --checkpoint is provided."
+            )
+        project_config = ProjectConfig(
+            model="from_checkpoint",
+            checkpoint_path=checkpoint_path,
+            checkpoint_model=args.checkpoint_model,
+        )
+    else:
+        if not args.model:
+            parser.error("--model is required when --checkpoint is not provided.")
+        project_config = ProjectConfig(model=args.model)
+
+    # Initialize CLIP manager
+    logger.info("Initializing CLIP manager...")
+
+    if checkpoint_path:
         logger.info(f"Loading checkpoint from {checkpoint_path}")
-        clip_manager = OpenClipManagment.from_checkpoint(checkpoint_path)
-        checkpoint_name = Path(checkpoint_path).stem
+        clip_manager = OpenClipManagment(config=project_config)
+        checkpoint_name = Path(project_config.checkpoint_path).stem
     else:
         logger.info("No checkpoint provided, using base pretrained model")
-        clip_manager = OpenClipManagment()
+        clip_manager = OpenClipManagment(config=project_config)
         checkpoint_name = None
 
     # Determine dataset path
     if args.dataset_path:
         dataset_path = args.dataset_path
     else:
-        dataset_path = settings.VALID_DATASET_PATTERN
+        dataset_path = project_config.valid_dataset_pattern
 
     logger.info(f"Loading validation dataset from {dataset_path}")
-    clip_dataset = ClipDataset(dataset_path)
+    clip_dataset = ClipDataset(config=project_config, dataset_pattern=dataset_path)
 
     # Create evaluator
-    evaluator = CLIPEvaluator(clip_manager, clip_dataset)
+    evaluator = CLIPEvaluator(
+        config=project_config,
+        clip_manager=clip_manager,
+        evaluation_dataset=clip_dataset,
+    )
 
     # Evaluate using efficient WebDataset loader
     results = evaluator.evaluate_with_loader()
@@ -276,5 +326,5 @@ if __name__ == "__main__":
     if checkpoint_path:
         results_file = f"eval_{checkpoint_name}.json"
     else:
-        results_file = f"eval_{settings.MODEL_CHOSEN.name}_basic.json"
-    save_results(results, results_file)
+        results_file = f"eval_{project_config.model.name}_basic.json"
+    save_results(project_config, results, results_file)

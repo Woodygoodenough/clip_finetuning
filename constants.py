@@ -14,6 +14,9 @@ WDS_TEXT_EXT = "txt"
 TRAIN_SHARDS_PATTERN = "clip_dataset_train.{000000..000260}.tar"
 VALID_SHARDS_PATTERN = "clip_dataset_valid.{000000..000006}.tar"
 TEST_SHARDS_PATTERN = "clip_dataset_valid.{000007..000032}.tar"
+TRAIN_EVAL_SHARDS_PATTERN = "clip_dataset_train.{000000..000006}.tar"
+VALID_EVAL_SHARDS_PATTERN = "clip_dataset_valid.{000000..000006}.tar"
+TEST_EVAL_SHARDS_PATTERN = "clip_dataset_valid.{000007..000013}.tar"
 
 # Metric identifiers
 RECALL_AT_5 = "recall@5"
