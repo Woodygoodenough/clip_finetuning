@@ -75,6 +75,7 @@ class PathConfig(BaseModel):
     on_colab: bool = False
     drive_path: Path = Path("/content/drive/MyDrive/6740 Group Project")
     local_dataset_root: Path = Path("./webdataset_shards")
+    colab_dataset_root: Path = Path("webdataset_shards")
     model_cache_dir: Path = Path("./openclip_cache")
     checkpoint_dir: Optional[Path] = None
     evaluation_dir: Optional[Path] = None
@@ -96,7 +97,9 @@ class PathConfig(BaseModel):
         return self
 
     def dataset_base(self) -> Path:
-        return self.drive_path if self.on_colab else self.local_dataset_root
+        if self.on_colab:
+            return self.drive_path / self.colab_dataset_root
+        return self.local_dataset_root
 
     def set_on_colab(self, on_colab: bool):
         self.on_colab = on_colab
