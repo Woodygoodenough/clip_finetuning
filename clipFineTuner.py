@@ -200,9 +200,7 @@ class CLIPFineTuner:
 
 def training_prep():
     logger.info("Initializing CLIP manager and fine-tuner...")
-    logger.info(
-        f"Model: {settings.MODEL_CHOSEN.name} | Pretrained: {settings.MODEL_CHOSEN.pretrained}"
-    )
+    logger.info(f"Model: {settings.MODEL_CHOSEN}")
     logger.info(f"Loss function: {settings.LOSS_FUNCTION}")
     clip = OpenClipManagment()
     clip_dataset = ClipDataset(settings.TRAIN_DATASET_PATTERN)
