@@ -195,7 +195,6 @@ class CLIPFineTuner:
         split_patterns = {
             "train": self.config.train_eval_dataset_pattern,
             "valid": self.config.valid_eval_dataset_pattern,
-            "test": self.config.test_eval_dataset_pattern,
         }
 
         evaluation_results = {}
