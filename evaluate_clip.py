@@ -14,9 +14,9 @@ import logging
 from pathlib import Path
 from openClipManagement import OpenClipManagment
 import numpy as np
-import argparse
 import json
 from dBManagement import ClipDataset
+import os
 
 # Set up logging
 logging.basicConfig(
@@ -116,21 +116,6 @@ class CLIPEvaluator:
         return text_to_image_recall, image_to_text_recall
 
     def evaluate_with_loader(self) -> dict:
-        """
-        Evaluate model on validation set using efficient WebDataset loader.
-
-        This approach is optimal because:
-        - Uses the same efficient pipeline as training
-        - Processes data in batches directly from disk
-        - More memory efficient (doesn't load all data at once)
-        - Consistent with training data flow
-
-        Args:
-            max_samples: Maximum number of samples to evaluate (None for all)
-
-        Returns:
-            Dictionary with evaluation metrics
-        """
         logger.info("Creating efficient WebDataset loader for evaluation...")
 
         # Get loader using the same approach as training
@@ -220,6 +205,18 @@ def print_results(results: dict):
     print("=" * 60 + "\n")
 
 
+def save_results(results: dict, file_name: str):
+    """Save evaluation results to a file"""
+    # mkdir if not exists
+    if not os.path.exists(settings.EVAL_DIR):
+        os.makedirs(settings.EVAL_DIR)
+    file_path = Path(settings.EVAL_DIR) / file_name
+    with open(file_path, "w") as f:
+        json.dump(results, f, indent=2)
+    logger.info(f"Results saved to {file_path.absolute()}")
+
+
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate CLIP model on validation set"
@@ -248,6 +245,7 @@ if __name__ == "__main__":
     if args.use_checkpoint:
         logger.info(f"Loading checkpoint from {settings.EVAL_CHECKPOINT}")
         clip_manager = OpenClipManagment.from_checkpoint(settings.EVAL_CHECKPOINT)
+        checkpoint_name = settings.EVAL_CHECKPOINT.split("/")[-1].split(".")[0]
     else:
         logger.info("No checkpoint provided, using base pretrained model")
         clip_manager = OpenClipManagment()
@@ -271,10 +269,10 @@ if __name__ == "__main__":
     print_results(results)
 
     # Save results to file
+
     if args.use_checkpoint:
-        results_file = Path("evaluation_results_checkpoint.json")
+        results_file = f"eval_{checkpoint_name}.json"
     else:
-        results_file = Path("evaluation_results.json")
-    with open(results_file, "w") as f:
-        json.dump(results, f, indent=2)
-    logger.info(f"Results saved to {results_file}")
+        results_file = f"eval_{settings.MODEL_CHOSEN.name}_basic.json"
+    save_results(results, results_file)
+"""

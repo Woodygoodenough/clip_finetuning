@@ -65,4 +65,5 @@ class ClipDataset:
             self._dataset.map_tuple(img_transform, _identity),  # Identity for text
             batch_size=batch_size,
             num_workers=num_workers,
+            drop_last=True,
         )

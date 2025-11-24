@@ -14,12 +14,13 @@ class OpenClipManagment:
         self.model: open_clip.model.CLIP
         self.img_preprocess: Callable
         self.txt_tokenizer: Callable
+        self.model_config = settings.MODEL_CHOSEN
         self.model, self.img_preprocess, _ = open_clip.create_model_and_transforms(
-            settings.MODEL_NAME,
-            pretrained=settings.MODEL_PRETRAINED,
+            self.model_config.name,
+            pretrained=self.model_config.pretrained,
             cache_dir=settings.MODEL_CACHE_DIR,
         )
-        self.txt_tokenizer = open_clip.get_tokenizer(settings.MODEL_NAME)
+        self.txt_tokenizer = open_clip.get_tokenizer(self.model_config.name)
         self.device = torch.device(settings.DEVICE)
         self.model = self.model.to(self.device)
 

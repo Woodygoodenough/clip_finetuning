@@ -1,4 +1,6 @@
 import torch
+from enum import Enum
+from dataclasses import dataclass
 
 ON_COLAB = True
 # GPU-optimized batch size for T4 (16GB)
@@ -10,11 +12,32 @@ DRIVE_PATH = "/content/drive/MyDrive/6740 Group Project"
 TOTAL_TRAIN = 260490
 TOTAL_VALID = 32528
 
-## model parameters
-# MODEL_NAME = "ViT-B-32"
-MODEL_NAME = "ViT-B-16"
-# MODEL_PRETRAINED = "laion2b_s34b_b79k"
-MODEL_PRETRAINED = "laion2b_s34b_b88k"
+# use enum to specify specific model configurations
+
+
+# namedtuple to hold pretrained and name
+@dataclass
+class ModelConfig:
+    pretrained: str
+    name: str
+
+
+class OpenClipModel(Enum):
+    ViT_B_32 = ModelConfig(pretrained="laion2b_s34b_b79k", name="ViT-B-32")
+    ViT_B_16 = ModelConfig(pretrained="laion2b_s34b_b88k", name="ViT-B-16")
+    ViT_SigLIP_2_16 = ModelConfig(pretrained="webli", name="ViT-B-16-SigLIP2-256")
+
+
+MODEL_CHOSEN = OpenClipModel.ViT_SigLIP_2_16
+
+
+class LossFunction(Enum):
+    CONTRASTIVE = 1
+    SIGLIP = 2
+
+
+LOSS_FUNCTION = LossFunction.SIGLIP
+
 MODEL_CACHE_DIR = "./openclip_cache"
 
 ## device
@@ -33,13 +56,18 @@ if ON_COLAB:
     CHECKPOINT_DIR = f"{DRIVE_PATH}/checkpoints"
 else:
     CHECKPOINT_DIR = "./checkpoints"
-EVAL_CHECKPOINT = CHECKPOINT_DIR + "/final_checkpoint.pt"
 CHECKPOINT_INTERVAL = 1000
 if ON_COLAB:
     MAX_STEPS = None
 else:
     MAX_STEPS = 10
 
+
+## evaluation directory
+if ON_COLAB:
+    EVAL_DIR = f"{DRIVE_PATH}/evaluations"
+else:
+    EVAL_DIR = "./evaluations"
 
 ## dataset
 TRAIN_SHARDS_FILE = "clip_dataset_train.{000000..000260}.tar"
