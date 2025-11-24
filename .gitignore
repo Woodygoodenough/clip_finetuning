@@ -11,3 +11,4 @@ checkpoints/
 evaluation_results.json
 evaluation_results_checkpoint.json
 test.*
+evaluations/

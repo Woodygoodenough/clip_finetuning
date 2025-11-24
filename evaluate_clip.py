@@ -17,6 +17,7 @@ import numpy as np
 import json
 from dBManagement import ClipDataset
 import os
+import argparse
 
 # Set up logging
 logging.basicConfig(
@@ -31,7 +32,7 @@ class CLIPEvaluator:
     def __init__(
         self,
         clip_manager: OpenClipManagment,
-        clip_dataset: ClipDataset = ClipDataset(
+        evaluation_dataset: ClipDataset = ClipDataset(
             dataset_pattern=settings.VALID_DATASET_PATTERN
         ),
     ):
@@ -42,7 +43,7 @@ class CLIPEvaluator:
             clip_dataset: ClipDataset instance
         """
         self.clip = clip_manager
-        self.clip_dataset = clip_dataset
+        self.clip_dataset = evaluation_dataset
         self.device = self.clip.device
 
         # Set model to eval mode
@@ -216,17 +217,16 @@ def save_results(results: dict, file_name: str):
     logger.info(f"Results saved to {file_path.absolute()}")
 
 
-"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate CLIP model on validation set"
     )
 
     parser.add_argument(
-        "-c",
-        "--use-checkpoint",
-        action="store_true",
-        help="Use checkpoint in settings.EVAL_CHECKPOINT, if not provided, uses base pretrained model",
+        "--checkpoint",
+        type=str,
+        default=None,
+        help="Path to a fine-tuned checkpoint to evaluate; defaults to base pretrained weights when omitted",
     )
 
     parser.add_argument(
@@ -242,13 +242,16 @@ if __name__ == "__main__":
     logger.info("Initializing CLIP manager...")
 
     # Initialize evaluator and load checkpoint if provided
-    if args.use_checkpoint:
-        logger.info(f"Loading checkpoint from {settings.EVAL_CHECKPOINT}")
-        clip_manager = OpenClipManagment.from_checkpoint(settings.EVAL_CHECKPOINT)
-        checkpoint_name = settings.EVAL_CHECKPOINT.split("/")[-1].split(".")[0]
+    checkpoint_path = args.checkpoint
+
+    if checkpoint_path:
+        logger.info(f"Loading checkpoint from {checkpoint_path}")
+        clip_manager = OpenClipManagment.from_checkpoint(checkpoint_path)
+        checkpoint_name = Path(checkpoint_path).stem
     else:
         logger.info("No checkpoint provided, using base pretrained model")
         clip_manager = OpenClipManagment()
+        checkpoint_name = None
 
     # Determine dataset path
     if args.dataset_path:
@@ -270,9 +273,8 @@ if __name__ == "__main__":
 
     # Save results to file
 
-    if args.use_checkpoint:
+    if checkpoint_path:
         results_file = f"eval_{checkpoint_name}.json"
     else:
         results_file = f"eval_{settings.MODEL_CHOSEN.name}_basic.json"
     save_results(results, results_file)
-"""

@@ -174,7 +174,7 @@ class CLIPFineTuner:
         self, step: int, best_recall_t2i: float, best_recall_i2t: float
     ) -> Tuple[float, float]:
         # we evaluate the model and save the best checkpoint when both recall@10 are improved
-        evaluator = CLIPEvaluator(self.clip, self.clip_dataset)
+        evaluator = CLIPEvaluator(self.clip)
         result = evaluator.evaluate_with_loader()
         print_results(result)
         result_name = f"eval_{settings.MODEL_CHOSEN.name}_step_{step}.json"
