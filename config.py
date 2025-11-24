@@ -47,7 +47,7 @@ class DatasetConfig(BaseModel):
     train_shards_file: str = TRAIN_SHARDS_PATTERN
     valid_shards_file: str = VALID_SHARDS_PATTERN
     test_shards_file: str = TEST_SHARDS_PATTERN
-    shardshuffle: bool = True
+    shardshuffle: bool | int = 100
     train_eval_shards_file: str = TRAIN_EVAL_SHARDS_PATTERN
     valid_eval_shards_file: str = VALID_EVAL_SHARDS_PATTERN
     test_eval_shards_file: str = TEST_EVAL_SHARDS_PATTERN
