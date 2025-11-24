@@ -2,6 +2,12 @@ import torch
 from enum import Enum
 from dataclasses import dataclass
 
+from constants import (
+    TEST_SHARDS_PATTERN,
+    TRAIN_SHARDS_PATTERN,
+    VALID_SHARDS_PATTERN,
+)
+
 ON_COLAB = True
 # GPU-optimized batch size for T4 (16GB)
 # ViT-B-32: ~3-4GB per batch of 64
@@ -71,9 +77,9 @@ else:
     EVAL_DIR = "./evaluations"
 
 ## dataset
-TRAIN_SHARDS_FILE = "clip_dataset_train.{000000..000260}.tar"
-VALID_SHARDS_FILE = "clip_dataset_valid.{000000..000006}.tar"
-TEST_SHARDS_FILE = "clip_dataset_valid.{000007..000032}.tar"
+TRAIN_SHARDS_FILE = TRAIN_SHARDS_PATTERN
+VALID_SHARDS_FILE = VALID_SHARDS_PATTERN
+TEST_SHARDS_FILE = TEST_SHARDS_PATTERN
 if ON_COLAB:
     TRAIN_DATASET_PATTERN = f"{DRIVE_PATH}/{TRAIN_SHARDS_FILE}"
     VALID_DATASET_PATTERN = f"{DRIVE_PATH}/{VALID_SHARDS_FILE}"
