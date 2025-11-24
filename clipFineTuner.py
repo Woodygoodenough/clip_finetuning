@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch.cuda.amp import autocast, GradScaler  # Mixed precision for T4 GPU
 from typing import Callable, List, Optional, Tuple
 import logging
+import sys
 from dBManagement import ClipDataset
 from config import ProjectConfig, LossFunction
 from evaluate_clip import CLIPEvaluator, print_results, save_results
@@ -14,7 +15,10 @@ from pathlib import Path
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+    force=True,
 )
 logger = logging.getLogger(__name__)
 
