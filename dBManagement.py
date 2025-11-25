@@ -24,7 +24,7 @@ class ClipDataset:
         shardshuffle: Optional[bool] = None,
     ):
         self.config = config
-        self._pattern = dataset_pattern or self.config.valid_dataset_pattern
+        self._pattern = dataset_pattern or self.config.train_dataset_pattern
         shuffle = (
             self.config.datasets.shardshuffle if shardshuffle is None else shardshuffle
         )
@@ -38,7 +38,7 @@ class ClipDataset:
         """Allow direct iteration over the dataset - returns tuples (image, text)"""
         return iter(self._dataset)
 
-    def get_first_n_samples(self, n: int = 10) -> List[Tuple[Image.Image, str]]:
+    def get_first_n_samples(self, *, n: int = 10) -> List[Tuple[Image.Image, str]]:
         """Get a list of n samples from the dataset"""
         return [sample_tuple for i, sample_tuple in enumerate(self._dataset) if i < n]
 

@@ -134,7 +134,7 @@ class LossFunction(str, Enum):
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_assignment=True)
     on_colab: bool = False
-    paths: PathConfig = PathConfig(on_colab=on_colab)
+    paths: PathConfig = PathConfig()
     datasets: DatasetConfig = DatasetConfig()
     training: TrainingConfig = TrainingConfig()
     registry: ModelRegistry = ModelRegistry(
