@@ -29,3 +29,8 @@ EVAL_RESULTS_PREFIX = "eval"
 
 # Misc
 DEFAULT_SHARD_SIZE = 1000
+
+# dir names
+DATASET_DIR = "webdataset_shards"
+CHECKPOINTS_DIR = "checkpoints"
+EVALUATIONS_DIR = "evaluations"
