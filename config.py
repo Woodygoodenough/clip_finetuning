@@ -72,7 +72,7 @@ class DatasetConfig(BaseModel):
 
 
 class PathConfig(BaseModel):
-    on_colab: bool = False
+    on_colab: bool = True
     drive_path: Path = Path("/content/drive/MyDrive/6740 Group Project")
     local_dataset_root: Path = Path("./webdataset_shards")
     colab_dataset_root: Path = Path("webdataset_shards")
@@ -133,8 +133,8 @@ class LossFunction(str, Enum):
 
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_assignment=True)
-    on_colab: bool = False
-    paths: PathConfig = PathConfig(on_colab=on_colab)
+    on_colab: bool = True
+    paths: PathConfig = PathConfig()
     datasets: DatasetConfig = DatasetConfig()
     training: TrainingConfig = TrainingConfig()
     registry: ModelRegistry = ModelRegistry(
