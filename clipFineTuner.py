@@ -2,16 +2,21 @@
 from openClipManagement import OpenClipManagment
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast, GradScaler  # Mixed precision for T4 GPU
-from typing import Callable, List, Optional, Tuple
+from torch.cuda.amp import autocast, GradScaler
+from typing import Callable, List
 import logging
 import sys
 from dBManagement import ClipDataset
-from config import ProjectConfig, LossFunction
+from config import ProjectConfig
 from evaluate_clip import CLIPEvaluator, print_results, save_results
 import torch.nn.functional as F
-import argparse
 from pathlib import Path
+from constants import (
+    TRAIN_EVAL_SHARDS_PATTERN,
+    VALID_EVAL_SHARDS_PATTERN,
+    TRAIN_SHARDS_PATTERN,
+)
+from config import LossFunctionOptions
 
 # Set up logging
 logging.basicConfig(
@@ -46,7 +51,7 @@ class CLIPFineTuner:
         # Enables ~2x faster training with ~50% less memory usage
         self.scaler = GradScaler()
         self.best_eval_score: float = float("-inf")
-        self.best_checkpoint_path: Optional[Path] = None
+        self.best_checkpoint_path: Path | None = None
 
     def contrastive_loss(
         self, image_embeds: torch.Tensor, text_embeds: torch.Tensor
@@ -113,13 +118,13 @@ class CLIPFineTuner:
         return loss.item()
 
     def train(self):
-        checkpoint_path = self.config.paths.checkpoint_dir
+        checkpoint_path = self.config.checkpoint_dir
         checkpoint_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Checkpoint directory: {checkpoint_path.absolute()}")
 
-        if self.config.loss_function == LossFunction.CONTRASTIVE:
+        if self.config.loss_function == LossFunctionOptions.CONTRASTIVE:
             loss_fn = self.contrastive_loss
-        elif self.config.loss_function == LossFunction.SIGLIP:
+        elif self.config.loss_function == LossFunctionOptions.SIGLIP:
             loss_fn = self.siglip_loss
         else:
             raise ValueError(f"Invalid loss function: {self.config.loss_function}")
@@ -175,7 +180,7 @@ class CLIPFineTuner:
         logger.info("Training completed!")
 
     def save_checkpoint(
-        self, checkpoint_name: str, additional_info: Optional[dict] = None
+        self, checkpoint_name: str, additional_info: dict | None = None
     ):
         """Save fine-tuned model checkpoint
         Args:
@@ -187,7 +192,7 @@ class CLIPFineTuner:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scaler_state_dict": self.scaler.state_dict(),
         }
-        checkpoint_dir = Path(self.config.paths.checkpoint_dir)
+        checkpoint_dir = self.config.checkpoint_dir
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         if additional_info:
             checkpoint.update(additional_info)
@@ -197,8 +202,8 @@ class CLIPFineTuner:
     def periodic_checkpoint_evaluation(self, step: int) -> None:
         logger.info(f"Running evaluation at global step {step}...")
         split_patterns = {
-            "train": self.config.train_eval_dataset_pattern,
-            "valid": self.config.valid_eval_dataset_pattern,
+            "train": TRAIN_EVAL_SHARDS_PATTERN,
+            "valid": VALID_EVAL_SHARDS_PATTERN,
         }
 
         evaluation_results = {}
@@ -207,7 +212,8 @@ class CLIPFineTuner:
             logger.info(f"Evaluating {split} subset: {pattern}")
             dataset = ClipDataset(
                 config=self.config,
-                dataset_pattern=pattern,
+                dataset_pattern=self.config.dataset_dir / pattern,
+                # we don't shuffle the evaluation dataset
                 shardshuffle=False,
             )
             evaluator = CLIPEvaluator(
@@ -222,10 +228,10 @@ class CLIPFineTuner:
 
         results_payload = {
             "step": step,
-            "loss_function": self.config.loss_function.value,
+            "loss_function": self.config.loss_function.name,
             "splits": evaluation_results,
         }
-        result_name = f"eval_{self.config.model.name}_step_{step}.json"
+        result_name = f"eval_{self.config.clip_model.name_}_step_{step}.json"
         save_results(self.config, results_payload, result_name)
         logger.info(f"Evaluation results saved to {result_name}")
 
@@ -243,7 +249,7 @@ class CLIPFineTuner:
                     f"Removing previous best checkpoint: {self.best_checkpoint_path}"
                 )
                 self.best_checkpoint_path.unlink()
-            checkpoint_name = f"ck_{self.config.model.name}_step_{step}.pt"
+            checkpoint_name = f"ck_{self.config.clip_model.name_}_step_{step}.pt"
             self.save_checkpoint(
                 checkpoint_name,
                 additional_info={
@@ -254,9 +260,7 @@ class CLIPFineTuner:
                     "eval_loss_type": valid_results["loss_type"],
                 },
             )
-            self.best_checkpoint_path = (
-                Path(self.config.paths.checkpoint_dir) / checkpoint_name
-            )
+            self.best_checkpoint_path = self.config.checkpoint_dir / checkpoint_name
             self.best_eval_score = eval_score
         else:
             logger.info(
@@ -266,11 +270,13 @@ class CLIPFineTuner:
 
 def training_prep(config: ProjectConfig):
     logger.info("Initializing CLIP manager and fine-tuner...")
-    logger.info(f"Model: {config.model.name} ({config.model.pretrained})")
-    logger.info(f"Loss function: {config.loss_function.value}")
+    logger.info(f"Model: {config.clip_model.name_} ({config.clip_model.pretrained_})")
+    logger.info(f"Loss function: {config.loss_function.name}")
     clip = OpenClipManagment(config=config)
     clip_dataset = ClipDataset(
-        config=config, dataset_pattern=config.train_dataset_pattern
+        config=config,
+        dataset_pattern=config.dataset_dir / TRAIN_SHARDS_PATTERN,
+        shardshuffle=config.shardshuffle,
     )
     finetuner = CLIPFineTuner(
         clip_manager=clip,
@@ -286,63 +292,17 @@ def training_prep(config: ProjectConfig):
     logger.info(
         f"Training configuration: {device_info} | Batch Size: {config.training.batch_size} | Workers: {config.training.num_workers} | Mixed Precision: Enabled"
     )
-    logger.info(f"Loading dataset from {config.train_dataset_pattern}")
-    max_steps = config.training.max_steps
-    max_steps_msg = f" (limited to {max_steps} steps)" if max_steps else ""
-    logger.info(f"Starting training{max_steps_msg}...")
+    logger.info(f"Directories used:")
+    logger.info(f"  - Dataset: {config.dataset_dir / TRAIN_SHARDS_PATTERN}")
+    logger.info(f"  - Checkpoints: {config.checkpoint_dir}")
+    logger.info(f"  - Evaluations: {config.evaluation_dir}")
+    logger.info(f"  - Model Cache: {config.model_cache_dir}")
+    logger.info(f"Loading dataset from {config.dataset_dir / TRAIN_SHARDS_PATTERN}")
+    logger.info(
+        f" (limited to {config.training.max_steps} steps)"
+        if config.training.max_steps
+        else ""
+    )
+    logger.info(f"Ready for fine-tuning. Please call .train() method....")
 
     return finetuner
-
-
-if __name__ == "__main__":
-    try:
-        parser = argparse.ArgumentParser(
-            description="Fine-tune an OpenCLIP model with explicit configuration."
-        )
-        parser.add_argument(
-            "--model",
-            type=str,
-            help="Model key to instantiate (e.g., ViT_SigLIP_2_16). Required unless --checkpoint is provided.",
-        )
-        parser.add_argument(
-            "--checkpoint",
-            type=str,
-            default=None,
-            help="Path to a checkpoint to resume from.",
-        )
-        parser.add_argument(
-            "--checkpoint-model",
-            type=str,
-            default=None,
-            help="Model key describing the architecture stored in the checkpoint (required with --checkpoint).",
-        )
-        parser.add_argument(
-            "--config-path",
-            type=str,
-            default=None,
-            help="Optional path to a JSON config override (not yet implemented).",
-        )
-
-        args = parser.parse_args()
-
-        checkpoint_path = Path(args.checkpoint) if args.checkpoint else None
-        if checkpoint_path:
-            if not args.checkpoint_model:
-                parser.error(
-                    "--checkpoint-model is required when --checkpoint is provided."
-                )
-            project_config = ProjectConfig(
-                model="from_checkpoint",
-                checkpoint_path=checkpoint_path,
-                checkpoint_model=args.checkpoint_model,
-            )
-        else:
-            if not args.model:
-                parser.error("--model is required when not loading from checkpoint.")
-            project_config = ProjectConfig(model=args.model)
-
-        finetuner = training_prep(project_config)
-        finetuner.train()
-    except Exception as e:
-        logger.error(f"Error during training: {e}", exc_info=True)
-        raise

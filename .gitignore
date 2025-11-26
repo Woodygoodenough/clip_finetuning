@@ -15,3 +15,8 @@ evaluations/
 webdataset_shards*
 
 caption_augmentation.py
+
+*.pt
+
+notebooks/
+*_test.*

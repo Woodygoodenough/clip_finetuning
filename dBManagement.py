@@ -1,9 +1,10 @@
 import webdataset as wds
-from typing import Tuple, List, Optional
+from typing import Tuple, List
 from PIL import Image
 from typing import Callable
-
+from pathlib import Path
 from config import ProjectConfig
+from constants import TRAIN_SHARDS_PATTERN, VALID_SHARDS_PATTERN, TEST_SHARDS_PATTERN
 
 record_pair = Tuple[Image.Image, str]
 
@@ -20,16 +21,13 @@ class ClipDataset:
         self,
         *,
         config: ProjectConfig,
-        dataset_pattern: Optional[str] = None,
-        shardshuffle: Optional[bool] = None,
+        dataset_pattern: str | Path,
+        shardshuffle: bool,
     ):
         self.config = config
-        self._pattern = dataset_pattern or self.config.train_dataset_pattern
-        shuffle = (
-            self.config.datasets.shardshuffle if shardshuffle is None else shardshuffle
-        )
+        self._pattern = str(dataset_pattern)
         self._dataset = (
-            wds.WebDataset(self._pattern, shardshuffle=shuffle)
+            wds.WebDataset(self._pattern, shardshuffle=shardshuffle)
             .decode(wds.autodecode.imagehandler("pil"), wds.autodecode.basichandlers)
             .to_tuple("jpg", "txt")
         )
@@ -44,8 +42,8 @@ class ClipDataset:
 
     def get_loader_with_strings(
         self,
-        batch_size: Optional[int] = None,
-        num_workers: Optional[int] = None,
+        batch_size: int | None = None,
+        num_workers: int | None = None,
         img_transform: Callable = None,
     ) -> wds.WebLoader:
         """
