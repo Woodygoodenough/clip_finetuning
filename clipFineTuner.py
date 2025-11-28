@@ -44,10 +44,13 @@ class CLIPFineTuner:
         self.clip_dataset = clip_dataset
         self.config = config
         self.loss_fn = nn.CrossEntropyLoss()
-        self.logit_bias = nn.Parameter(torch.tensor(-np.log(1)))
+        self.logit_bias = nn.Parameter(
+            torch.tensor(-np.log(-10.0), dtype=torch.float32)
+        )
+        self.logit_scale = nn.Parameter(torch.tensor(np.log(10), dtype=torch.float32))
         self.device = self.clip.device
         self.optimizer = torch.optim.AdamW(
-            list(self.clip.model.parameters()) + [self.logit_bias],
+            list(self.clip.model.parameters()) + [self.logit_bias, self.logit_scale],
             lr=self.config.training.learning_rate,
         )
         # Mixed precision scaler for T4 GPU optimization
@@ -62,7 +65,7 @@ class CLIPFineTuner:
         image_embeds = self.clip.normalize_tensor(image_embeds)
         text_embeds = self.clip.normalize_tensor(text_embeds)
 
-        logits = (image_embeds @ text_embeds.T) * self.clip.model.logit_scale.exp()
+        logits = (image_embeds @ text_embeds.T) * self.logit_scale.exp()
         labels = torch.arange(len(logits), device=logits.device)
 
         loss_i = self.loss_fn(logits, labels)
@@ -79,7 +82,7 @@ class CLIPFineTuner:
             # image_embeds = F.normalize(image_embeds, dim=-1)
             # text_embeds = F.normalize(text_embeds, dim=-1)
 
-        logits = image_embeds @ text_embeds.T * self.clip.model.logit_scale.exp()
+        logits = image_embeds @ text_embeds.T * self.logit_scale.exp()
         logits = logits + self.logit_bias
         B = logits.size(0)
         # target matrix: 1 on diagonal, 0 elsewhere
