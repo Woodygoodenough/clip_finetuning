@@ -43,13 +43,13 @@ class CLIPFineTuner:
         self.clip = clip_manager
         self.clip_dataset = clip_dataset
         self.config = config
+        self.loss_fn = nn.CrossEntropyLoss()
+        self.logit_bias = nn.Parameter(torch.tensor(-np.log(1)))
+        self.device = self.clip.device
         self.optimizer = torch.optim.AdamW(
             list(self.clip.model.parameters()) + [self.logit_bias],
             lr=self.config.training.learning_rate,
         )
-        self.loss_fn = nn.CrossEntropyLoss()
-        self.logit_bias = nn.Parameter(torch.tensor(-np.log(1)))
-        self.device = self.clip.device
         # Mixed precision scaler for T4 GPU optimization
         # Enables ~2x faster training with ~50% less memory usage
         self.scaler = GradScaler()
