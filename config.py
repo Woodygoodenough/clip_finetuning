@@ -54,6 +54,7 @@ class TrainingConfig:
     num_workers: int = 2
     learning_rate: float = 1e-5
     checkpoint_interval: int = 300
+    normalize_embeddings_in_siglip: bool = False
     max_steps: int | None = None
     epochs: int = 5
 
@@ -100,9 +101,3 @@ class ProjectConfig:
     @property
     def model_cache_dir(self) -> Path:
         return self.base_path / "openclip_cache"
-
-
-# %%
-ClipModelOptions.ViT_B_32.name_
-
-# %%

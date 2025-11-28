@@ -34,3 +34,9 @@ DEFAULT_SHARD_SIZE = 1000
 DATASET_DIR = "webdataset_shards"
 CHECKPOINTS_DIR = "checkpoints"
 EVALUATIONS_DIR = "evaluations"
+
+# webdataset keys
+IMG_KEY = "jpg"
+PRIMARY_CAPTION_KEY = "txt0.txt"
+AUGMENTED_CAPTION_KEY = "txt1.txt"
+AUGMENTED_CAPTION_KEY_2 = "txt2.txt"

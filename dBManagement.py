@@ -4,14 +4,13 @@ from PIL import Image
 from typing import Callable
 from pathlib import Path
 from config import ProjectConfig
-from constants import TRAIN_SHARDS_PATTERN, VALID_SHARDS_PATTERN, TEST_SHARDS_PATTERN
-
-record_pair = Tuple[Image.Image, str]
-
-
-def _identity(x):
-    """Identity function for text (keeps strings as-is). For multiprocessing compatibility, we cannot use a lambda function."""
-    return x
+import random
+from constants import (
+    IMG_KEY,
+    PRIMARY_CAPTION_KEY,
+    AUGMENTED_CAPTION_KEY,
+    AUGMENTED_CAPTION_KEY_2,
+)
 
 
 class ClipDataset:
@@ -29,7 +28,12 @@ class ClipDataset:
         self._dataset = (
             wds.WebDataset(self._pattern, shardshuffle=shardshuffle)
             .decode(wds.autodecode.imagehandler("pil"), wds.autodecode.basichandlers)
-            .to_tuple("jpg", "txt")
+            .to_tuple(
+                IMG_KEY,
+                PRIMARY_CAPTION_KEY,
+                AUGMENTED_CAPTION_KEY,
+                AUGMENTED_CAPTION_KEY_2,
+            )
         )
 
     def __iter__(self):
@@ -67,9 +71,13 @@ class ClipDataset:
         batch_size = batch_size or self.config.training.batch_size
         num_workers = num_workers or self.config.training.num_workers
 
+        def _transform_img_and_pick_caption(sample):
+            img, *caps = sample
+            return img_transform(img), random.choice(caps)
+
         # Only transform images; keep text as strings for batch tokenization
         return wds.WebLoader(
-            self._dataset.map_tuple(img_transform, _identity),  # Identity for text
+            self._dataset.map(_transform_img_and_pick_caption),
             batch_size=batch_size,
             num_workers=num_workers,
             drop_last=True,

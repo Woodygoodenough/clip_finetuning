@@ -17,6 +17,7 @@ from constants import (
     TRAIN_SHARDS_PATTERN,
 )
 from config import LossFunctionOptions
+import numpy as np
 
 # Set up logging
 logging.basicConfig(
@@ -43,9 +44,11 @@ class CLIPFineTuner:
         self.clip_dataset = clip_dataset
         self.config = config
         self.optimizer = torch.optim.AdamW(
-            self.clip.model.parameters(), lr=self.config.training.learning_rate
+            list(self.clip.model.parameters()) + [self.logit_bias],
+            lr=self.config.training.learning_rate,
         )
         self.loss_fn = nn.CrossEntropyLoss()
+        self.logit_bias = nn.Parameter(torch.tensor(-np.log(1)))
         self.device = self.clip.device
         # Mixed precision scaler for T4 GPU optimization
         # Enables ~2x faster training with ~50% less memory usage
@@ -70,11 +73,14 @@ class CLIPFineTuner:
         self, image_embeds: torch.Tensor, text_embeds: torch.Tensor
     ) -> torch.Tensor:
         # L2-normalize (you already have a helper)
-        image_embeds = F.normalize(image_embeds, dim=-1)
-        text_embeds = F.normalize(text_embeds, dim=-1)
+        if self.config.training.normalize_embeddings_in_siglip:
+            pass
+            # in case somehow we still normalize, we comment it out here
+            # image_embeds = F.normalize(image_embeds, dim=-1)
+            # text_embeds = F.normalize(text_embeds, dim=-1)
 
         logits = image_embeds @ text_embeds.T * self.clip.model.logit_scale.exp()
-
+        logits = logits + self.logit_bias
         B = logits.size(0)
         # target matrix: 1 on diagonal, 0 elsewhere
         targets = torch.eye(B, device=logits.device)

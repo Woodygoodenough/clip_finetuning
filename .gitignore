@@ -20,3 +20,5 @@ caption_augmentation.py
 
 notebooks/
 *_test.*
+
+*.json*
