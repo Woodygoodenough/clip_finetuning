@@ -28,13 +28,19 @@ class ClipDataset:
         self._dataset = (
             wds.WebDataset(self._pattern, shardshuffle=shardshuffle)
             .decode(wds.autodecode.imagehandler("pil"), wds.autodecode.basichandlers)
+            .to_tuple("jpg", "txt")
+        )
+        """
+        self._dataset = (
+            wds.WebDataset(self._pattern, shardshuffle=shardshuffle)
+            .decode(wds.autodecode.imagehandler("pil"), wds.autodecode.basichandlers)
             .to_tuple(
                 IMG_KEY,
                 PRIMARY_CAPTION_KEY,
                 AUGMENTED_CAPTION_KEY,
                 AUGMENTED_CAPTION_KEY_2,
             )
-        )
+        )"""
 
     def __iter__(self):
         """Allow direct iteration over the dataset - returns tuples (image, text)"""
@@ -72,8 +78,9 @@ class ClipDataset:
         num_workers = num_workers or self.config.training.num_workers
 
         def _transform_img_and_pick_caption(sample):
-            img, *caps = sample
-            return img_transform(img), random.choice(caps)
+            return img_transform(sample[0]), sample[1]
+            # img, *caps = sample
+            # return img_transform(img), random.choice(caps)
 
         # Only transform images; keep text as strings for batch tokenization
         return wds.WebLoader(
