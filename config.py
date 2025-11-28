@@ -4,7 +4,7 @@ we conly use dataclasses for simplicity and ease of use.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -67,7 +67,7 @@ class ProjectConfig:
     device: str = "cuda" if torch_cuda_available() else "cpu"
     should_load_checkpoint: bool = False
     checkpoint_path: Path | None = None
-    training: TrainingConfig = TrainingConfig()
+    training: TrainingConfig = field(default_factory=TrainingConfig)
     shardshuffle: bool | int = 100
 
     def __post_init__(self):

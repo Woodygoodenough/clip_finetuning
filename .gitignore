@@ -22,3 +22,5 @@ notebooks/
 *_test.*
 
 *.json*
+
+*.jsonl
