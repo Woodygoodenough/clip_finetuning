@@ -54,7 +54,7 @@ class TrainingConfig:
     num_workers: int = 2
     learning_rate: float = 1e-5
     checkpoint_interval: int = 500
-    normalize_embeddings_in_siglip: bool = False
+    # normalize_embeddings_in_siglip: bool = False
     max_steps: int | None = None
     epochs: int = 3
 

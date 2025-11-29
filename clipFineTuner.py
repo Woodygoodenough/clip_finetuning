@@ -95,12 +95,8 @@ class CLIPFineTuner:
     def siglip_loss(
         self, image_embeds: torch.Tensor, text_embeds: torch.Tensor
     ) -> torch.Tensor:
-        # L2-normalize (you already have a helper)
-        if self.config.training.normalize_embeddings_in_siglip:
-            pass
-            # in case somehow we still normalize, we comment it out here
-            # image_embeds = F.normalize(image_embeds, dim=-1)
-            # text_embeds = F.normalize(text_embeds, dim=-1)
+        image_embeds = F.normalize(image_embeds, dim=-1)
+        text_embeds = F.normalize(text_embeds, dim=-1)
 
         logits = image_embeds @ text_embeds.T * self.logit_scale.exp()
         logits = logits + self.logit_bias
@@ -191,7 +187,7 @@ class CLIPFineTuner:
 
                 if global_step % 10 == 0:
                     logger.info(
-                        f"Epoch {epoch + 1}, Batch {batch_idx}, Global Step {global_step}, Loss: {loss:.4f}"
+                        f"Epoch {epoch + 1}, Batch {batch_idx + 1}, Global Step {global_step}, Loss: {loss:.4f}"
                     )
 
                 if (
