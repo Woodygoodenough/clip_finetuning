@@ -48,23 +48,12 @@ class CLIPFineTuner:
 
         added_parameters = []
         self.logit_bias = None
-
+        self.logit_scale = self.clip.model.logit_scale
         if self.config.loss_function == LossFunctionOptions.SIGLIP:
-            # Use separate scale + bias for SigLIP
-            self.logit_scale = nn.Parameter(
-                torch.tensor(np.log(10.0), dtype=torch.float32)
-            )
-            self.logit_bias = nn.Parameter(torch.tensor(-10.0, dtype=torch.float32))
-            added_parameters.extend([self.logit_scale, self.logit_bias])
-
-            # Optional but nice: freeze CLIP's original logit_scale, since we don't use it
-            self.clip.model.logit_scale.requires_grad_(False)
-
+            self.logit_bias = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+            added_parameters.extend([self.logit_bias])
         elif self.config.loss_function == LossFunctionOptions.CONTRASTIVE:
-            # Reuse CLIP's built-in logit_scale
-            self.logit_scale = self.clip.model.logit_scale
-            # No need to add it again; it's already in model.parameters()
-
+            pass
         else:
             raise ValueError(f"Invalid loss function: {self.config.loss_function}")
 
