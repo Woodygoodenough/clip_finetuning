@@ -44,9 +44,7 @@ class CLIPFineTuner:
         self.clip_dataset = clip_dataset
         self.config = config
         self.loss_fn = nn.CrossEntropyLoss()
-        self.logit_bias = nn.Parameter(
-            torch.tensor(-np.log(-10.0), dtype=torch.float32)
-        )
+        self.logit_bias = nn.Parameter(torch.tensor(-10.0, dtype=torch.float32))
         self.logit_scale = nn.Parameter(torch.tensor(np.log(10), dtype=torch.float32))
         self.device = self.clip.device
         self.optimizer = torch.optim.AdamW(
@@ -243,6 +241,9 @@ class CLIPFineTuner:
         result_name = f"eval_{self.config.clip_model.name_}_step_{step}.json"
         save_results(self.config, results_payload, result_name)
         logger.info(f"Evaluation results saved to {result_name}")
+        # report logit scale and logit bias
+        logger.info(f"Logit scale: {self.logit_scale.item():.4f}")
+        logger.info(f"Logit bias: {self.logit_bias.item():.4f}")
 
         valid_results = evaluation_results["valid"]
         eval_recall_t2i = valid_results["recall@10"]["text_to_image"]
