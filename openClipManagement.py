@@ -79,6 +79,3 @@ class OpenClipManagment:
     def encode_txt_batch(self, texts: List[str]) -> torch.Tensor:
         text_tokens = self.txt_tokenizer(texts).to(self.device)  # shape: [batch, seq]
         return self.model.encode_text(text_tokens)
-
-    def normalize_tensor(self, tensor: torch.Tensor):
-        return tensor / tensor.norm(dim=-1, keepdim=True)

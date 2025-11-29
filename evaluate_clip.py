@@ -54,8 +54,8 @@ class CLIPEvaluator:
             Similarity matrix [N_images, N_texts]
         """
         # Normalize embeddings
-        image_embeds = self.clip.normalize_tensor(image_embeds)
-        text_embeds = self.clip.normalize_tensor(text_embeds)
+        image_embeds = F.normalize(image_embeds, dim=-1)
+        text_embeds = F.normalize(text_embeds, dim=-1)
 
         # Compute similarity matrix
         similarity = image_embeds @ text_embeds.T  # [N_images, N_texts]

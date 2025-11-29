@@ -44,13 +44,35 @@ class CLIPFineTuner:
         self.clip_dataset = clip_dataset
         self.config = config
         self.loss_fn = nn.CrossEntropyLoss()
-        self.logit_bias = nn.Parameter(torch.tensor(-10.0, dtype=torch.float32))
-        self.logit_scale = nn.Parameter(torch.tensor(np.log(10), dtype=torch.float32))
         self.device = self.clip.device
+
+        added_parameters = []
+        self.logit_bias = None
+
+        if self.config.loss_function == LossFunctionOptions.SIGLIP:
+            # Use separate scale + bias for SigLIP
+            self.logit_scale = nn.Parameter(
+                torch.tensor(np.log(10.0), dtype=torch.float32)
+            )
+            self.logit_bias = nn.Parameter(torch.tensor(-10.0, dtype=torch.float32))
+            added_parameters.extend([self.logit_scale, self.logit_bias])
+
+            # Optional but nice: freeze CLIP's original logit_scale, since we don't use it
+            self.clip.model.logit_scale.requires_grad_(False)
+
+        elif self.config.loss_function == LossFunctionOptions.CONTRASTIVE:
+            # Reuse CLIP's built-in logit_scale
+            self.logit_scale = self.clip.model.logit_scale
+            # No need to add it again; it's already in model.parameters()
+
+        else:
+            raise ValueError(f"Invalid loss function: {self.config.loss_function}")
+
         self.optimizer = torch.optim.AdamW(
-            list(self.clip.model.parameters()) + [self.logit_bias, self.logit_scale],
+            list(self.clip.model.parameters()) + added_parameters,
             lr=self.config.training.learning_rate,
         )
+
         # Mixed precision scaler for T4 GPU optimization
         # Enables ~2x faster training with ~50% less memory usage
         self.scaler = GradScaler()
@@ -60,8 +82,8 @@ class CLIPFineTuner:
     def contrastive_loss(
         self, image_embeds: torch.Tensor, text_embeds: torch.Tensor
     ) -> torch.Tensor:
-        image_embeds = self.clip.normalize_tensor(image_embeds)
-        text_embeds = self.clip.normalize_tensor(text_embeds)
+        image_embeds = F.normalize(image_embeds, dim=-1)
+        text_embeds = F.normalize(text_embeds, dim=-1)
 
         logits = (image_embeds @ text_embeds.T) * self.logit_scale.exp()
         labels = torch.arange(len(logits), device=logits.device)
@@ -140,9 +162,10 @@ class CLIPFineTuner:
         max_steps = self.config.training.max_steps
         checkpoint_interval = self.config.training.checkpoint_interval
 
-        global_step = -1
+        global_step = 0
         stop_training = False
-
+        # let's do an initial evaluation to get the metrics for the basic CLIP model
+        self.periodic_checkpoint_evaluation(global_step)
         for epoch in range(epochs):
             logger.info("=" * 50)
             logger.info(f"Epoch {epoch + 1} of {epochs}")
@@ -182,7 +205,7 @@ class CLIPFineTuner:
                 break
 
         # Save final checkpoint after training completes
-        if global_step >= 0:
+        if global_step > 0:
             self.periodic_checkpoint_evaluation(global_step)
         logger.info("Training completed!")
 
