@@ -266,7 +266,8 @@ class CLIPFineTuner:
         logger.info(f"Evaluation results saved to {result_name}")
         # report logit scale and logit bias
         logger.info(f"Logit scale: {self.logit_scale.item():.4f}")
-        logger.info(f"Logit bias: {self.logit_bias.item():.4f}")
+        if self.logit_bias is not None:
+            logger.info(f"Logit bias: {self.logit_bias.item():.4f}")
 
         valid_results = evaluation_results["valid"]
         eval_recall_t2i = valid_results["recall@10"]["text_to_image"]
