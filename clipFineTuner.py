@@ -250,7 +250,7 @@ class CLIPFineTuner:
         save_results(self.config, results_payload, result_name)
         logger.info(f"Evaluation results saved to {result_name}")
         # report logit scale and logit bias
-        logger.info(f"Logit scale: {self.logit_scale.item():.4f}")
+        logger.info(f"Logit scale: log({self.logit_scale.exp().item():.4f})")
         if self.logit_bias is not None:
             logger.info(f"Logit bias: {self.logit_bias.item():.4f}")
 
