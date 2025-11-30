@@ -84,8 +84,8 @@ class CLIPFineTuner:
     def siglip_loss(
         self, image_embeds: torch.Tensor, text_embeds: torch.Tensor
     ) -> torch.Tensor:
-        image_embeds = F.normalize(image_embeds, dim=-1)
-        text_embeds = F.normalize(text_embeds, dim=-1)
+        # image_embeds = F.normalize(image_embeds, dim=-1)
+        # text_embeds = F.normalize(text_embeds, dim=-1)
 
         logits = image_embeds @ text_embeds.T * self.logit_scale.exp()
         logits = logits + self.logit_bias
