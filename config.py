@@ -8,6 +8,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from constants import (
+    TRAIN_SHARDS_PATTERN,
+    VALID_SHARDS_PATTERN,
+    TRAIN_EVAL_SHARDS_PATTERN,
+    VALID_EVAL_SHARDS_PATTERN,
+)
+
 
 def torch_cuda_available() -> bool:
     try:
@@ -67,8 +74,13 @@ class ProjectConfig:
     device: str = "cuda" if torch_cuda_available() else "cpu"
     should_load_checkpoint: bool = False
     checkpoint_path: Path | None = None
+    dataset_root: Path | None = None
     training: TrainingConfig = field(default_factory=TrainingConfig)
     shardshuffle: bool | int = 100
+    train_shards_pattern: str = TRAIN_SHARDS_PATTERN
+    valid_shards_pattern: str = VALID_SHARDS_PATTERN
+    train_eval_shards_pattern: str = TRAIN_EVAL_SHARDS_PATTERN
+    valid_eval_shards_pattern: str = VALID_EVAL_SHARDS_PATTERN
 
     def __post_init__(self):
         if self.clip_model is None:
@@ -88,6 +100,8 @@ class ProjectConfig:
 
     @property
     def dataset_dir(self) -> Path:
+        if self.dataset_root is not None:
+            return Path(self.dataset_root)
         return self.base_path / "webdataset_shards"
 
     @property

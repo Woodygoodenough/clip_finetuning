@@ -51,7 +51,9 @@ class OpenClipManagment:
             "Trainable Parameters": trainable_params,
         }
 
-    def get_loader(self, dataset: ClipDataset) -> wds.WebLoader:
+    def get_loader(
+        self, dataset: ClipDataset, *, caption_mode: str = "random"
+    ) -> wds.WebLoader:
         """
         Create an optimal WebLoader that batches strings before tokenization.
 
@@ -65,6 +67,16 @@ class OpenClipManagment:
         - text_strings: List[str] (strings to be tokenized in training loop)
         """
         return dataset.get_loader_with_strings(
+            batch_size=self.config.training.batch_size,
+            num_workers=self.config.training.num_workers,
+            img_transform=self.img_preprocess,
+            caption_mode=caption_mode,
+        )
+
+    def get_loader_with_caption_lists(
+        self, dataset: ClipDataset
+    ) -> wds.WebLoader:
+        return dataset.get_loader_with_caption_lists(
             batch_size=self.config.training.batch_size,
             num_workers=self.config.training.num_workers,
             img_transform=self.img_preprocess,

@@ -8,7 +8,12 @@ import logging
 import sys
 from dBManagement import ClipDataset
 from config import ProjectConfig
-from evaluate_clip import CLIPEvaluator, print_results, save_results
+from evaluate_clip import (
+    CLIPEvaluator,
+    print_multi_results,
+    print_results,
+    save_results,
+)
 import torch.nn.functional as F
 from pathlib import Path
 from constants import (
@@ -217,8 +222,8 @@ class CLIPFineTuner:
     def periodic_checkpoint_evaluation(self, step: int) -> None:
         logger.info(f"Running evaluation at global step {step}...")
         split_patterns = {
-            "train": TRAIN_EVAL_SHARDS_PATTERN,
-            "valid": VALID_EVAL_SHARDS_PATTERN,
+            "train": self.config.train_eval_shards_pattern,
+            "valid": self.config.valid_eval_shards_pattern,
         }
 
         evaluation_results = {}
@@ -237,9 +242,14 @@ class CLIPFineTuner:
                 evaluation_dataset=dataset,
             )
             split_result = evaluator.evaluate_with_loader()
+            multi_result = evaluator.evaluate_with_loader_multi_positive()
+            split_result["multi_recall@5"] = multi_result["recall@5"]
+            split_result["multi_recall@10"] = multi_result["recall@10"]
+            split_result["multi_num_captions"] = multi_result["num_captions"]
             evaluation_results[split] = split_result
             print(f"\n*** {split.upper()} METRICS ***")
             print_results(split_result)
+            print_multi_results(multi_result)
 
         results_payload = {
             "step": step,
@@ -294,7 +304,7 @@ def training_prep(config: ProjectConfig):
     clip = OpenClipManagment(config=config)
     clip_dataset = ClipDataset(
         config=config,
-        dataset_pattern=config.dataset_dir / TRAIN_SHARDS_PATTERN,
+        dataset_pattern=config.dataset_dir / config.train_shards_pattern,
         shardshuffle=config.shardshuffle,
     )
     finetuner = CLIPFineTuner(
@@ -312,11 +322,13 @@ def training_prep(config: ProjectConfig):
         f"Training configuration: {device_info} | Batch Size: {config.training.batch_size} | Workers: {config.training.num_workers} | Mixed Precision: Enabled"
     )
     logger.info(f"Directories used:")
-    logger.info(f"  - Dataset: {config.dataset_dir / TRAIN_SHARDS_PATTERN}")
+    logger.info(f"  - Dataset: {config.dataset_dir / config.train_shards_pattern}")
     logger.info(f"  - Checkpoints: {config.checkpoint_dir}")
     logger.info(f"  - Evaluations: {config.evaluation_dir}")
     logger.info(f"  - Model Cache: {config.model_cache_dir}")
-    logger.info(f"Loading dataset from {config.dataset_dir / TRAIN_SHARDS_PATTERN}")
+    logger.info(
+        f"Loading dataset from {config.dataset_dir / config.train_shards_pattern}"
+    )
     logger.info(
         f" (limited to {config.training.max_steps} steps)"
         if config.training.max_steps

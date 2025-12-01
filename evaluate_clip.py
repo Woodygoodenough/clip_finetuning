@@ -124,8 +124,8 @@ class CLIPEvaluator:
     def evaluate_with_loader(self) -> dict:
         logger.info("Creating WebDataset loader for evaluation...")
 
-        # Get loader using the same approach as training
-        loader = self.clip.get_loader(self.clip_dataset)
+        # Get loader using the same approach as training, but force primary captions
+        loader = self.clip.get_loader(self.clip_dataset, caption_mode="primary")
 
         # Collect embeddings batch by batch
         image_embeds_list = []
@@ -192,6 +192,112 @@ class CLIPEvaluator:
 
         return results
 
+    def evaluate_with_loader_multi_positive(self) -> dict:
+        logger.info(
+            "Creating WebDataset loader for multi-positive evaluation (all captions)..."
+        )
+
+        loader = self.clip.get_loader_with_caption_lists(self.clip_dataset)
+
+        image_embeds_list = []
+        text_embeds_list = []
+        text_to_image_targets: list[int] = []
+        image_to_text_targets: list[list[int]] = []
+        num_samples = 0
+        running_index = 0
+
+        logger.info("Processing batches and computing embeddings (multi-positive)...")
+        with torch.no_grad():
+            for batch_idx, (img_tensors, caption_lists) in enumerate(loader):
+                img_tensors = img_tensors.to(self.device)
+                img_embeds = self.clip.model.encode_image(img_tensors)
+                image_embeds_list.append(img_embeds.cpu())
+
+                batch_size = img_tensors.size(0)
+                num_samples += batch_size
+
+                while len(image_to_text_targets) < running_index + batch_size:
+                    image_to_text_targets.append([])
+
+                flat_texts: list[str] = []
+                for local_idx, captions in enumerate(caption_lists):
+                    image_idx = running_index + local_idx
+                    valid_captions = [
+                        cap for cap in captions if isinstance(cap, str) and cap.strip()
+                    ]
+                    if not valid_captions:
+                        valid_captions = [""]
+                    for text in valid_captions:
+                        text_idx = len(text_to_image_targets)
+                        flat_texts.append(text)
+                        text_to_image_targets.append(image_idx)
+                        image_to_text_targets[image_idx].append(text_idx)
+
+                if flat_texts:
+                    txt_tensors = self.clip.txt_tokenizer(flat_texts).to(self.device)
+                    text_embeds = self.clip.model.encode_text(txt_tensors)
+                    text_embeds_list.append(text_embeds.cpu())
+
+                running_index += batch_size
+
+                if (batch_idx + 1) % 10 == 0:
+                    logger.info(f"[multi] Processed {num_samples} image samples...")
+
+        if not image_embeds_list or not text_embeds_list:
+            raise ValueError("No embeddings were produced for multi-positive evaluation.")
+
+        image_embeds = torch.cat(image_embeds_list, dim=0).to(self.device)
+        text_embeds = torch.cat(text_embeds_list, dim=0).to(self.device)
+
+        logger.info("Computing similarity matrix for multi-positive eval...")
+        similarity_matrix = self.compute_similarity_matrix(image_embeds, text_embeds)
+        logit_scale = self.clip.model.logit_scale.exp()
+        logits = similarity_matrix * logit_scale
+
+        text_targets = torch.tensor(text_to_image_targets, device=logits.device)
+
+        def _multi_recall_at_k(k: int) -> tuple[float, float]:
+            # Text-to-Image: success if target image is within top-k
+            text_topk = torch.argsort(logits, dim=0)[-k:].T
+            t2i = (
+                (text_topk == text_targets.unsqueeze(1))
+                .any(dim=1)
+                .float()
+                .mean()
+                .item()
+            )
+
+            # Image-to-Text: success if any positive caption for the image is in top-k
+            image_topk = torch.argsort(logits, dim=1)[:, -k:]
+            correct = []
+            for image_idx, positives in enumerate(image_to_text_targets):
+                if not positives:
+                    correct.append(0.0)
+                    continue
+                pos_tensor = torch.tensor(positives, device=logits.device)
+                match = torch.isin(image_topk[image_idx], pos_tensor).any().float().item()
+                correct.append(match)
+            i2t = sum(correct) / len(correct) if correct else 0.0
+            return t2i, i2t
+
+        recall5_t2i, recall5_i2t = _multi_recall_at_k(5)
+        recall10_t2i, recall10_i2t = _multi_recall_at_k(10)
+
+        results = {
+            "num_samples": num_samples,
+            "num_captions": len(text_to_image_targets),
+            "recall@5": {
+                "text_to_image": recall5_t2i,
+                "image_to_text": recall5_i2t,
+            },
+            "recall@10": {
+                "text_to_image": recall10_t2i,
+                "image_to_text": recall10_i2t,
+            },
+        }
+
+        return results
+
 
 def print_results(results: dict):
     """Print evaluation results in a formatted way"""
@@ -216,6 +322,28 @@ def print_results(results: dict):
         f"  Image-to-Text: {results['recall@10']['image_to_text']:.4f} ({results['recall@10']['image_to_text']*100:.2f}%)"
     )
     print("=" * 60 + "\n")
+
+
+def print_multi_results(results: dict):
+    """Print multi-positive evaluation results."""
+    print("[MULTI-POSITIVE] Recall@5:")
+    print(
+        f"  Text-to-Image: {results['recall@5']['text_to_image']:.4f} "
+        f"({results['recall@5']['text_to_image']*100:.2f}%)"
+    )
+    print(
+        f"  Image-to-Text: {results['recall@5']['image_to_text']:.4f} "
+        f"({results['recall@5']['image_to_text']*100:.2f}%)"
+    )
+    print("[MULTI-POSITIVE] Recall@10:")
+    print(
+        f"  Text-to-Image: {results['recall@10']['text_to_image']:.4f} "
+        f"({results['recall@10']['text_to_image']*100:.2f}%)"
+    )
+    print(
+        f"  Image-to-Text: {results['recall@10']['image_to_text']:.4f} "
+        f"({results['recall@10']['image_to_text']*100:.2f}%)\n"
+    )
 
 
 def save_results(config: ProjectConfig, results: dict, file_name: str):
