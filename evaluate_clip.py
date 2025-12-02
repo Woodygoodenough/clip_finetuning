@@ -244,7 +244,9 @@ class CLIPEvaluator:
                     logger.info(f"[multi] Processed {num_samples} image samples...")
 
         if not image_embeds_list or not text_embeds_list:
-            raise ValueError("No embeddings were produced for multi-positive evaluation.")
+            raise ValueError(
+                "No embeddings were produced for multi-positive evaluation."
+            )
 
         image_embeds = torch.cat(image_embeds_list, dim=0).to(self.device)
         text_embeds = torch.cat(text_embeds_list, dim=0).to(self.device)
@@ -275,7 +277,9 @@ class CLIPEvaluator:
                     correct.append(0.0)
                     continue
                 pos_tensor = torch.tensor(positives, device=logits.device)
-                match = torch.isin(image_topk[image_idx], pos_tensor).any().float().item()
+                match = (
+                    torch.isin(image_topk[image_idx], pos_tensor).any().float().item()
+                )
                 correct.append(match)
             i2t = sum(correct) / len(correct) if correct else 0.0
             return t2i, i2t
@@ -326,24 +330,24 @@ def print_results(results: dict):
 
 def print_multi_results(results: dict):
     """Print multi-positive evaluation results."""
-        print("[MULTI-POSITIVE] Recall@5:")
-        print(
-            f"  Text-to-Image: {results['recall@5']['text_to_image']:.4f} "
-            f"({results['recall@5']['text_to_image']*100:.2f}%)"
-        )
-        print(
-            f"  Image-to-Text: {results['recall@5']['image_to_text']:.4f} "
-            f"({results['recall@5']['image_to_text']*100:.2f}%)"
-        )
-        print("[MULTI-POSITIVE] Recall@10:")
-        print(
-            f"  Text-to-Image: {results['recall@10']['text_to_image']:.4f} "
-            f"({results['recall@10']['text_to_image']*100:.2f}%)"
-        )
-        print(
-            f"  Image-to-Text: {results['recall@10']['image_to_text']:.4f} "
-            f"({results['recall@10']['image_to_text']*100:.2f}%)\n"
-        )
+    print("[MULTI-POSITIVE] Recall@5:")
+    print(
+        f"  Text-to-Image: {results['recall@5']['text_to_image']:.4f} "
+        f"({results['recall@5']['text_to_image']*100:.2f}%)"
+    )
+    print(
+        f"  Image-to-Text: {results['recall@5']['image_to_text']:.4f} "
+        f"({results['recall@5']['image_to_text']*100:.2f}%)"
+    )
+    print("[MULTI-POSITIVE] Recall@10:")
+    print(
+        f"  Text-to-Image: {results['recall@10']['text_to_image']:.4f} "
+        f"({results['recall@10']['text_to_image']*100:.2f}%)"
+    )
+    print(
+        f"  Image-to-Text: {results['recall@10']['image_to_text']:.4f} "
+        f"({results['recall@10']['image_to_text']*100:.2f}%)\n"
+    )
 
 
 def save_results(config: ProjectConfig, results: dict, file_name: str):
