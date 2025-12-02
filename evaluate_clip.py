@@ -326,24 +326,24 @@ def print_results(results: dict):
 
 def print_multi_results(results: dict):
     """Print multi-positive evaluation results."""
-    print("[MULTI-POSITIVE] Recall@5:")
-    print(
-        f"  Text-to-Image: {results['recall@5']['text_to_image']:.4f} "
-        f"({results['recall@5']['text_to_image']*100:.2f}%)"
-    )
-    print(
-        f"  Image-to-Text: {results['recall@5']['image_to_text']:.4f} "
-        f"({results['recall@5']['image_to_text']*100:.2f}%)"
-    )
-    print("[MULTI-POSITIVE] Recall@10:")
-    print(
-        f"  Text-to-Image: {results['recall@10']['text_to_image']:.4f} "
-        f"({results['recall@10']['text_to_image']*100:.2f}%)"
-    )
-    print(
-        f"  Image-to-Text: {results['recall@10']['image_to_text']:.4f} "
-        f"({results['recall@10']['image_to_text']*100:.2f}%)\n"
-    )
+        print("[MULTI-POSITIVE] Recall@5:")
+        print(
+            f"  Text-to-Image: {results['recall@5']['text_to_image']:.4f} "
+            f"({results['recall@5']['text_to_image']*100:.2f}%)"
+        )
+        print(
+            f"  Image-to-Text: {results['recall@5']['image_to_text']:.4f} "
+            f"({results['recall@5']['image_to_text']*100:.2f}%)"
+        )
+        print("[MULTI-POSITIVE] Recall@10:")
+        print(
+            f"  Text-to-Image: {results['recall@10']['text_to_image']:.4f} "
+            f"({results['recall@10']['text_to_image']*100:.2f}%)"
+        )
+        print(
+            f"  Image-to-Text: {results['recall@10']['image_to_text']:.4f} "
+            f"({results['recall@10']['image_to_text']*100:.2f}%)\n"
+        )
 
 
 def save_results(config: ProjectConfig, results: dict, file_name: str):

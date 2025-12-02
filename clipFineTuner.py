@@ -242,14 +242,9 @@ class CLIPFineTuner:
                 evaluation_dataset=dataset,
             )
             split_result = evaluator.evaluate_with_loader()
-            multi_result = evaluator.evaluate_with_loader_multi_positive()
-            split_result["multi_recall@5"] = multi_result["recall@5"]
-            split_result["multi_recall@10"] = multi_result["recall@10"]
-            split_result["multi_num_captions"] = multi_result["num_captions"]
             evaluation_results[split] = split_result
             print(f"\n*** {split.upper()} METRICS ***")
             print_results(split_result)
-            print_multi_results(multi_result)
 
         results_payload = {
             "step": step,
