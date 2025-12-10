@@ -25,4 +25,5 @@ notebooks/
 
 *.jsonl
 
-
+figures/
+scripts/
