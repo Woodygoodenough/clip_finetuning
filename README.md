@@ -2,7 +2,6 @@
 
 This repository contains the implementation for fine-tuning OpenCLIP models on the Fashion-Gen dataset for image-to-text and text-to-image retrieval tasks. The project compares three CLIP-style architectures (ViT-B/32, ViT-B/16, and ViT-B/16-SigLIP2-256) and two contrastive loss functions (InfoNCE and BCE) under single-GPU constraints.
 
-**Paper:** "OpenCLIP Fine-Tuning for Multi-Modal Retrieval Task on FashionGen Dataset" (ICLR 2025)
 
 ## Overview
 
