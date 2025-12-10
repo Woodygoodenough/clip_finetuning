@@ -10,7 +10,7 @@ __pycache__/
 checkpoints/
 evaluation_results.json
 evaluation_results_checkpoint.json
-test.*
+test*
 evaluations*
 webdataset_shards*
 
@@ -24,4 +24,5 @@ notebooks/
 *.json*
 
 *.jsonl
+
 
