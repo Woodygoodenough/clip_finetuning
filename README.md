@@ -98,6 +98,18 @@ The training loop automatically evaluates on the validation set at checkpoint in
 
 Results are saved to JSON files in the evaluation directory.
 
+### Output Directories
+
+The training process creates and uses several directories (relative to `base_path`):
+
+- **`checkpoints/`**: Model checkpoints saved at specified intervals
+- **`evaluations/`**: Evaluation results in JSON format (Recall@5 and Recall@10 metrics)
+- **`openclip_cache/`**: Cached OpenCLIP model weights
+
+### Training Logs
+
+The `training_log/` directory contains evaluation results from our training sessions, organized in `.csv` files.
+
 ## Dataset
 
 We release two versions of the Fashion-Gen dataset in WebDataset format:
