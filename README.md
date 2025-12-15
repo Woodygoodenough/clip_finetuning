@@ -124,10 +124,14 @@ The augmented dataset contains three captions per image (original + 2 GPT-genera
 
 ## Results Summary
 
-Fine-tuning on Fashion-Gen yields substantial improvements:
-- **ViT-B/32 (InfoNCE)**: 31.36% relative improvement in Recall@10
-- **ViT-B/16 (InfoNCE)**: 30.26% relative improvement
-- **ViT-B/16-SigLIP2 (BCE)**: 28.77% relative improvement (best single model)
-- **ViT-B/16-SigLIP2 (BCE, Augmented)**: 31.77% relative improvement (best overall)
+Fine-tuning on Fashion-Gen yields substantial improvements over zero-shot baselines. The table below shows Recall@10 results on the Fashion-Gen validation set:
+
+| Model (loss) | Zero-shot | Best | Abs. Gain | Rel. Gain |
+|--------------|-----------|------|-----------|-----------|
+| ViT-B/32 (InfoNCE) | 0.5281 | 0.6936 | +0.1656 | +31.36% |
+| ViT-B/16 (InfoNCE) | 0.5862 | 0.7635 | +0.1774 | +30.26% |
+| ViT-B/16-SigLIP2 (InfoNCE) | 0.6185 | 0.7772 | +0.1588 | +25.67% |
+| ViT-B/16-SigLIP2 (BCE) | 0.6185 | 0.7964 | +0.1779 | +28.77% |
+| ViT-B/16-SigLIP2 (BCE, Aug. Dataset) | 0.6185 | 0.8150 | +0.1965 | +31.77% |
 
 The SigLIP2 model with BCE loss and caption augmentation achieves the highest performance, demonstrating the effectiveness of both architectural improvements and data augmentation strategies.
